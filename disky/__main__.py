@@ -1,0 +1,13 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+import signal
+import sys
+import threading
+
+# Catch Stop before anything else loads, so a Stop in the first moment ends the run cleanly, not by the signal.
+STOP = threading.Event()
+for _sig in (signal.SIGINT, signal.SIGTERM):
+    signal.signal(_sig, lambda *_: STOP.set())
+
+from .cli import main  # noqa: E402
+
+sys.exit(main(stop=STOP))

@@ -1,0 +1,81 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+"""Check and repair: what is asked of the drive service, and what is refused before anything is asked."""
+import io
+import json
+import subprocess
+import unittest
+from contextlib import redirect_stdout
+from unittest import mock
+
+from disky import cli, contract, fscare
+
+
+def service(fs="vfat", mounted=(), answer=True, fail=""):
+    """A pretend drive service. Returns (run, list of methods called)."""
+    called = []
+
+    def run(cmd, **kw):
+        if "get-property" in cmd:
+            prop = cmd[-1]
+            data = fs if prop == "IdType" else [list(m.encode()) + [0] for m in mounted]
+            return subprocess.CompletedProcess(cmd, 0, json.dumps({"type": "x", "data": data}), "")
+        called.append((cmd[cmd.index("call") + 2].rsplit("/", 1)[-1], cmd[cmd.index("call") + 4]))
+        if fail:
+            return subprocess.CompletedProcess(cmd, 1, "", fail)
+        return subprocess.CompletedProcess(cmd, 0, json.dumps({"type": "b", "data": [answer]}), "")
+    return run, called
+
+
+class Rules(unittest.TestCase):
+    def test_check_and_repair_ask_the_service_and_say_what_it_found(self):
+        for action, method in (("check", "Check"), ("repair", "Repair")):
+            for answer in (True, False):
+                run, called = service(answer=answer)
+                r = fscare.act(action, "/dev/sdz1", run)
+                self.assertEqual(called, [("sdz1", method)])
+                self.assertEqual((r["ok"], r["fs"], r["device"], r["message"]),
+                                 (answer, "vfat", "sdz1", fscare.WORDS[(action, answer)]))
+
+    def test_never_on_a_mounted_partition(self):
+        for action in ("check", "repair"):
+            run, called = service(mounted=["/run/media/someone/DATA"])
+            with self.assertRaises(fscare.Refused) as e:
+                fscare.act(action, "sdz1", run)
+            self.assertEqual(called, [])
+            self.assertIn("Unmount it first", str(e.exception))
+
+    def test_never_on_ntfs(self):
+        for fs in ("ntfs", "ntfs3", "fuseblk"):
+            run, called = service(fs=fs)
+            with self.assertRaises(fscare.Refused) as e:
+                fscare.act("repair", "sdz1", run)
+            self.assertEqual((called, str(e.exception)), ([], fscare.NTFS_WHY))
+
+    def test_errors_in_plain_words(self):
+        for error, word in (("org.freedesktop.UDisks2.Error.NotSupported: no", "no tool to repair hfsplus"),
+                            ("Error.NotAuthorizedDismissed", "password was not given"),
+                            ("odd\nlast line", "It did not work: last line")):
+            run, _ = service(fs="hfsplus", fail=error)
+            with self.assertRaises(fscare.Refused) as e:
+                fscare.act("repair", "sdz1", run)
+            self.assertIn(word, str(e.exception))
+
+    def test_command_line_and_contract(self):
+        for cmd, answer, code in (("fscheck", True, 0), ("fscheck", False, 1), ("fsrepair", True, 0)):
+            run, called = service(answer=answer)
+            out = io.StringIO()
+            with mock.patch.object(fscare.proc, "run", run), mock.patch.object(fscare.act, "__defaults__", (run, 6 * 3600)), \
+                    mock.patch.object(fscare.facts, "__defaults__", (run,)), redirect_stdout(out):
+                got = cli.main([cmd, "sdz1", "--json"])
+            events = [json.loads(line) for line in out.getvalue().splitlines()]
+            self.assertEqual([p for e in events for p in contract.problems(e)], [])
+            self.assertEqual((got, events[1]["event"], events[1]["ok"]), (code, "fs_result", answer))
+        run, _ = service(fs="ntfs")
+        out = io.StringIO()
+        with mock.patch.object(fscare.act, "__defaults__", (run, 1)), redirect_stdout(out):
+            self.assertEqual(cli.main(["fsrepair", "sdz1", "--json"]), 3)
+        self.assertIn("refused", out.getvalue())
+
+
+if __name__ == "__main__":
+    unittest.main()

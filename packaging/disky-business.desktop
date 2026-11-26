@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Disky Business
+Comment=Fill a drive, read it back, see every block
+Exec=disky-business
+Icon=disky-business
+Categories=System;Utility;
+Terminal=false
