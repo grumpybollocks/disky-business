@@ -180,8 +180,8 @@ class SmartTab(TabBase):
         d = self.panel.current_drive()
         if d is None or d.smart or not d.device or self.mode is not None:
             return
-        if self.confirm(f"Read the SMART record of {d.model} with smartctl?\nIt only reads. The system will ask "
-                        "for the admin password, because talking to a drive through a USB case needs it."):
+        if self.confirm(f"Read the SMART record of {d.model} with smartctl?\nIt only reads. Talking to a drive "
+                        "through a USB case needs admin rights. " + self.password_words()):
             self.error = self.usb_data = None
             self.asked_drive = d
             self.detail.setText("Reading...")
@@ -200,11 +200,11 @@ class SmartTab(TabBase):
             return
         if self.confirm(f"Run a {kind} self-test on {d.model}?\n\nThe drive tests itself. {how_long} It only "
                         "reads, and the drive stays usable, a little slower.\nDisky stays busy until it ends; "
-                        "\"Stop self-test\" ends it early.\n\nThe system will ask for the admin password."):
+                        "\"Stop self-test\" ends it early.\n\n" + self.password_words()):
             self.error = self.test_result = None
             self.test_status.setText(f"Starting the {kind} self-test...")
             self.set_busy("selftest")
-            self.runner.start("selftest", d.device, "--kind", kind)
+            self.runner.start("selftest", d.device, "--kind", kind, wrap=self.wrap())
 
     def stop_test(self):
         if self.mode == "selftest":

@@ -8,7 +8,7 @@ import stat
 import sys
 import threading
 
-from . import __version__, engine, exfat, frag, fscare, mounts, proc, safety, selftest, smartread, speed, tips, trim
+from . import __version__, engine, exfat, frag, fscare, helper, mounts, proc, safety, selftest, smartread, speed, tips, trim
 
 EXIT = {"good": 0, "bad": 1, "not_verified": 2, "nothing_to_check": 3, "stopped": 130}
 _UNITS = {"K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}
@@ -336,6 +336,17 @@ _SPEED_THERE = ("A speed-test file from an earlier run is still there: {e}. "
                 "Remove it with: disky clean <folder> --yes")
 
 
+def _helper(args, emit, stop):
+    if os.geteuid() != 0:
+        emit({"event": "error", "code": "needs_admin", "message": "The admin helper needs admin rights."})
+        return 3
+
+    def job(argv, job_stop):
+        parsed = _parser().parse_args(argv)
+        return _run(COMMANDS[parsed.cmd], parsed, emit, job_stop)
+    return helper.serve(emit, job)
+
+
 class Command:
     """One engine command. To add one: write its handler `run(args, emit, stop) -> exit code` and put a
     Command in COMMANDS. `target` says what the one argument is: "folder" must exist as a folder."""
@@ -357,6 +368,9 @@ COMMANDS = {c.name: c for c in (
     Command("defrag", "defragment one file with the system's own tool (btrfs, ext4, XFS)", _defrag,
             target="any", target_help="the file"),
     Command("trim", "tell the drive which space is free (the system's fstrim; needs admin rights)", _trim),
+    Command("helper", "the admin helper the window keeps for a session: runs trim, fragscan, smart, selftest, "
+            "fscheck and fsrepair on request (see disky/helper.py)", _helper, target="any",
+            target_help="a name for the session; not used"),
     Command("smart", "read-only: the drive's SMART record through smartctl (needs admin rights; for USB cases)",
             _smart, target="any", target_help="the drive, e.g. sdX"),
     Command("selftest", "let the drive run its own SMART self-test and follow it (the system asks for the "
@@ -379,7 +393,7 @@ def _listen(stop):
             return
 
 
-def main(argv=None, stop=None):
+def _parser():
     p = argparse.ArgumentParser(prog="disky", description="Fill a drive, read it back, see every block.")
     p.add_argument("--version", action="version", version=f"disky {__version__}")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -390,17 +404,26 @@ def main(argv=None, stop=None):
         s.add_argument("--stdin-stop", action="store_true", help="stop when the line 'stop' arrives on input")
         if c.options:
             c.options(s)
-    args = p.parse_args(argv)
+    return p
+
+
+def main(argv=None, stop=None):
+    args = _parser().parse_args(argv)
     command = COMMANDS[args.cmd]
     emit = Printer(args.json)
-    if command.target == "folder" and not os.path.isdir(args.folder):
-        emit({"event": "error", "code": "no_folder", "message": f"Not a folder: {args.folder}"})
-        return 3
     stop = stop or threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
-    if args.stdin_stop:
+    if args.stdin_stop and args.cmd != "helper":        # the helper reads its input itself
         threading.Thread(target=_listen, args=(stop,), daemon=True).start()
+    return _run(command, args, emit, stop)
+
+
+def _run(command, args, emit, stop):
+    """One command from start event to exit code. Used by main and, job after job, by the admin helper."""
+    if command.target == "folder" and not os.path.isdir(args.folder):
+        emit({"event": "error", "code": "no_folder", "message": f"Not a folder: {args.folder}"})
+        return 3
     emit({"event": "start", "contract": engine.CONTRACT_VERSION, "version": __version__, "mode": args.cmd,
           "block_bytes": engine.BLOCK, "sector_bytes": 512})
     if stop.is_set():                   # Stop came while starting up
