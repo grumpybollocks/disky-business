@@ -88,6 +88,11 @@ class TabBase(QWidget):
         except Exception as e:
             self.problems_seen.append(f"end: could not be shown ({e.__class__.__name__})")
             self.error = "The result could not be shown."
+            for name in ("status", "care_status", "test_status", "detail"):
+                label = getattr(self, name, None)       # say so where this tab shows its results
+                if label is not None:
+                    label.setText(self.error)
+                    break
         finally:
             if self.mode is not None:
                 self.set_busy(None)

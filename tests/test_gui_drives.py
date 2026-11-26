@@ -225,6 +225,7 @@ class InTheWindow(unittest.TestCase):
                 Row("Spare space left", "5 %", "Too low")]
         tab.panel.read_smart = lambda d: (asked.append(d.model), (rows, ""))[1]
         tab.drive_list.setCurrentRow(0)
+        self.assertTrue(tab.panel.settle())
         self.assertEqual(tab.health.text().split("\n"),
                          ["Health: OK", "30 °C   100 hours", "Life left: 85 %", "Worn-out spots replaced: 0 sectors",
                           "Warning: Cable errors: 4 (Check the cable)",

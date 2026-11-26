@@ -32,8 +32,8 @@ scheme or an engine command is one entry ([docs/BRICKS.md](docs/BRICKS.md)).
 
 ## Known limits
 
-- Mount, Unmount, Safely remove and the health box wait for the system on the window's own thread: a slow or
-  sleeping drive can freeze the window for some seconds.
+- The SMART table and the Care tab's checks before a job still wait for the system for a moment; a sleeping
+  drive can make that a few seconds. (Mount, Unmount, Safely remove and the health box no longer do.)
 - A long self-test keeps the app busy until it ends or is stopped.
 - Self-tests are not offered for drives in USB cases.
 

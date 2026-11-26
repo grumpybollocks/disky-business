@@ -134,6 +134,8 @@ class Panel(unittest.TestCase):
         panel.drive_list.setCurrentRow(0)
         self.assertEqual(buttons(), (True, False, True))
         panel.mount_button.click()
+        self.assertEqual((panel.action_note.text(), buttons()), ("Mounting...", (False, False, False)))
+        self.assertTrue(panel.settle())
         self.assertEqual(seen, ["mount"])
         self.assertEqual((panel.row(), panel.action_note.text()), (0, "Mounted at /run/media/someone/DATA."))
         self.assertEqual(buttons(), (False, True, True))        # the list was read again: now it can be unmounted
@@ -141,6 +143,7 @@ class Panel(unittest.TestCase):
         panel.read_drives = lambda: []                          # the drive was unplugged after the list was read
         Fake.unmount = staticmethod(lambda d: gone.append(d) or (True, "x"))
         panel.unmount_button.click()
+        self.assertTrue(panel.settle())
         self.assertEqual((gone, panel.action_note.text()), ([], "That drive is no longer there."))
         panel.read_drives = found
         panel.load_drives()
@@ -152,6 +155,52 @@ class Panel(unittest.TestCase):
         self.assertEqual(buttons(), (False, False, False))      # the system drive
         self.assertEqual(panel.action_note.text(), "")
 
+
+    def test_a_slow_drive_does_not_freeze_the_window(self):
+        import time
+        from PySide6.QtWidgets import QApplication
+        from diskygui.drivepanel import DrivePanel
+        QApplication.instance() or QApplication([])
+        slow_a = drive(Volume("sdy1", 1 << 30, "exfat", []))
+        slow_a.path, slow_a.smart, slow_a.model = "/p/a", "ata", "SLOW A"
+        quick_b = drive(Volume("sdz1", 1 << 30, "exfat", []))
+        quick_b.path, quick_b.model = "/p/b", "QUICK B"
+        panel = DrivePanel(lambda: [slow_a, quick_b])
+        self.addCleanup(panel.deleteLater)
+        from diskygui.smart import Row
+
+        def read(d):
+            time.sleep(0.8)
+            return [Row("Life left", "12 %")], ""
+        panel.read_smart = read
+
+        class Slow:
+            can_mount, can_unmount, can_remove = staticmethod(da.can_mount), staticmethod(da.can_unmount), \
+                staticmethod(da.can_remove)
+
+            @staticmethod
+            def mount(d):
+                mounted.append(d.model)
+                time.sleep(0.8)
+                return True, "Mounted."
+        mounted = []
+        panel.actions = Slow
+        began = time.monotonic()
+        panel.drive_list.setCurrentRow(0)               # its health answer takes 0.8 s
+        panel.drive_list.setCurrentRow(1)               # the user moves on at once
+        self.assertLess(time.monotonic() - began, 0.8)  # picking did not wait for the drive
+        self.assertTrue(panel.settle())
+        self.assertNotIn("12 %", panel.health.text())   # drive A's late answer is not shown beside drive B
+        began = time.monotonic()
+        panel.mount_button.click()
+        panel.act("mount")                              # asked again while the first still works
+        self.assertLess(time.monotonic() - began, 0.8)  # the click did not wait for the drive
+        self.assertTrue(panel.settle())
+        self.assertGreaterEqual(time.monotonic() - began, 0.8)
+        self.assertEqual((panel.action_note.text(), mounted), ("Mounted.", ["QUICK B"]))    # once, the right drive
+        panel.drive_list.setCurrentRow(0)
+        self.assertTrue(panel.settle())
+        self.assertIn("Life left: 12 %", panel.health.text())
 
 if __name__ == "__main__":
     unittest.main()

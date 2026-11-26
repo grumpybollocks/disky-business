@@ -3,13 +3,31 @@
 
 A tab owns one panel and listens to `changed(folder, hint)`. No drive is ever picked for the user.
 """
-from PySide6.QtCore import Qt, Signal
+import threading
+import time
+
+from PySide6.QtCore import Qt, QTimer, Signal
 from PySide6.QtWidgets import (QApplication, QFileDialog, QGridLayout, QLabel, QLineEdit, QListWidget, QPushButton,
                                QVBoxLayout, QWidget)
 
 from . import driveactions
 from . import drives as drives_mod
 from . import smart
+
+
+class _Job:
+    """One piece of slow work (asking the system about a drive) done off the window's thread."""
+
+    def __init__(self, work, then):
+        self.then, self.result, self.done = then, None, False
+
+        def run():
+            try:
+                self.result = work()
+            except Exception as e:                      # reported to `then`, never lost in the thread
+                self.result = e
+            self.done = True
+        threading.Thread(target=run, daemon=True).start()
 
 
 class DrivePanel(QWidget):
@@ -37,6 +55,10 @@ class DrivePanel(QWidget):
         self.read_smart = smart.read                    # replaced in tests
         self.busy = False
         self.acting = False
+        self.jobs = []                                  # slow work under way; the window stays usable meanwhile
+        self.collector = QTimer(self)
+        self.collector.setInterval(40)
+        self.collector.timeout.connect(self.collect)
         self.mount_button = QPushButton("Mount")
         self.mount_button.setToolTip("Make the drive's files reachable")
         self.unmount_button = QPushButton("Unmount")
@@ -101,7 +123,7 @@ class DrivePanel(QWidget):
 
     def update_actions(self):
         """Mount, Unmount and Safely remove are offered only where they can do something."""
-        d = None if self.busy else self.current_drive()
+        d = None if self.busy or self.acting else self.current_drive()
         self.mount_button.setEnabled(bool(d and self.actions.can_mount(d)))
         self.unmount_button.setEnabled(bool(d and self.actions.can_unmount(d)))
         self.remove_button.setEnabled(bool(d and self.actions.can_remove(d)))
@@ -128,22 +150,46 @@ class DrivePanel(QWidget):
         self.acting = True                              # a second click while this one works does nothing
         self.action_note.setText({"mount": "Mounting...", "unmount": "Unmounting...",
                                   "remove": "Switching off..."}[job])
-        QApplication.setOverrideCursor(Qt.WaitCursor)
-        QApplication.processEvents()
-        try:
+        self.update_actions()
+        action = getattr(self.actions, job)
+
+        def work():
             now = self.fresh(d)                         # the drive as it is now, not as it was listed
-            if now is None:
-                message = "That drive is no longer there."
-            else:
-                _done, message = getattr(self.actions, job)(now)
-        finally:
-            QApplication.restoreOverrideCursor()
-            self.acting = False
+            return (False, "That drive is no longer there.") if now is None else action(now)
+        self.later(work, self.acted, d)
+
+    def acted(self, d, result):
+        self.acting = False
+        message = result[1] if isinstance(result, tuple) else f"It did not work: {result}"
         self.load_drives()
         same = next((i for i, x in enumerate(self.drives) if x.path and x.path == d.path), -1)
         if same >= 0:
             self.drive_list.setCurrentRow(same)         # picked by the user before; shows its new state
+        self.update_actions()
         self.action_note.setText(message)
+
+    # -- slow work off the window's thread ---------------------------------------------------------------------
+    def later(self, work, then, *first):
+        """Run `work()` on another thread; call `then(*first, result)` back here when it is done."""
+        self.jobs.append((_Job(work, then), first))
+        self.collector.start()
+
+    def collect(self):
+        ready = [j for j in self.jobs if j[0].done]
+        self.jobs = [j for j in self.jobs if not j[0].done]
+        if not self.jobs:
+            self.collector.stop()
+        for job, first in ready:
+            job.then(*first, job.result)
+
+    def settle(self, seconds=15.0):
+        """Wait until the slow work under way has finished and been shown (used by tests and scripts)."""
+        end = time.monotonic() + seconds
+        while self.jobs and time.monotonic() < end:
+            self.collect()
+            QApplication.processEvents()
+            time.sleep(0.002)
+        return not self.jobs
 
     def row(self):
         rows = self.drive_list.selectionModel().selectedRows()
@@ -161,17 +207,21 @@ class DrivePanel(QWidget):
             return
         folder, why = d.target()
         self.health.setText("\n".join(self.health_lines(d)))
+        if d.smart:                                     # wear and warnings follow when the drive has answered
+            self.later(lambda: self.read_smart(d), self.health_read, d)
         self.set_folder(folder or "", why or "Press Start.")
 
     def health_lines(self, d):
         """Health, temperature and hours, then wear and warnings from the drive's SMART record."""
-        lines = d.health.lines()
-        if d.smart:
-            rows, _ = self.read_smart(d)
-            lines += smart.brief(rows)
-        elif d.usb and d.health.state == "unknown":
-            lines = ["No health data: this USB case does not pass it on."]
-        return lines
+        if not d.smart and d.usb and d.health.state == "unknown":
+            return ["No health data: this USB case does not pass it on."]
+        return d.health.lines()
+
+    def health_read(self, d, result):
+        now = self.current_drive()
+        if now is None or now.path != d.path or not isinstance(result, tuple):
+            return                                      # another drive was picked meanwhile, or no answer
+        self.health.setText("\n".join(d.health.lines() + smart.brief(result[0])))
 
     def choose_folder(self):
         path = QFileDialog.getExistingDirectory(self, "Folder on the drive", self.folder or "/")
