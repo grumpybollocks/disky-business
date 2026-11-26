@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QListWidget, QMessag
 
 from disky import frag, safety
 
+from .drives import fs_name
 from .mapmodel import BAD, GOOD, UNTOUCHED, WRITTEN, MapModel
 from .mapwidget import BlockMap
 from .runner import _ROOT
@@ -35,6 +36,14 @@ def size_text(n):
 def admin_wrap():
     """Command put in front of the engine when it must read a partition directly."""
     return ["pkexec", "env", f"PYTHONPATH={_ROOT}", "PYTHONDONTWRITEBYTECODE=1"]
+
+
+def share_text(part, whole):
+    """A share in words a person reads right: never "0.0 %" for something that is there."""
+    if not part:
+        return "0 %"
+    share = 100 * part / whole
+    return "under 0.1 %" if share < 0.1 else f"{share:.1f} %"
 
 
 class DefragTab(TabBase):
@@ -107,12 +116,12 @@ class DefragTab(TabBase):
             elif not folder:
                 self.status.setText(hint or "Pick a drive, then press Scan.")
             elif fs in frag.TOOLS:
-                self.status.setText(f"{fs}: press Scan. Scanning only reads.")
+                self.status.setText(f"{fs_name(fs)}: press Scan. Scanning only reads.")
             elif fs == "exfat":
                 self.status.setText("exFAT: press Scan. It only reads, and asks for the admin password because "
                                     "the drive's tables are read directly. " + NO_TOOL.format(fs="exFAT"))
             else:
-                self.status.setText(f"No fragmentation information for {fs or 'this file system'} yet.")
+                self.status.setText(f"No fragmentation information for {fs_name(fs) if fs else 'this file system'} yet.")
         self.update_buttons()
 
     def _picked(self):
@@ -184,7 +193,7 @@ class DefragTab(TabBase):
             self.worst = list(ev.get("worst", []))
             self._show_worst()
             files, bad = ev.get("files", 0), ev.get("fragmented_files", 0)
-            pct = f" ({100 * bad / files:.1f} %)" if files else ""
+            pct = f" ({share_text(bad, files)})" if files else ""
             self.summary = (f"{bad} of {files} files are in more than one piece{pct}, holding "
                             f"{size_text(ev.get('fragmented_bytes', 0))} of {size_text(ev.get('file_bytes', 0))}.")
             if ev.get("skipped"):
@@ -216,7 +225,7 @@ class DefragTab(TabBase):
         elif code == 130:
             self.status.setText("Stopped.")
         elif mode == "scan" and getattr(self, "summary", None):
-            self.status.setText(self.summary + ("" if self.kind() in frag.TOOLS else " " + NO_TOOL.format(fs=self.kind())))
+            self.status.setText(self.summary + ("" if self.kind() in frag.TOOLS else " " + NO_TOOL.format(fs=fs_name(self.kind()))))
         elif mode == "defrag" and getattr(self, "result", None):
             r = self.result
             if code != 0 or r.get("exit"):

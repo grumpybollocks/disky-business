@@ -39,5 +39,5 @@ scheme or an engine command is one entry ([docs/BRICKS.md](docs/BRICKS.md)).
 
 ## Not yet tried on real hardware
 
-Repair of a file system that is really damaged, Safely remove, stopping a self-test midway, a long self-test,
-and the exFAT scan started from the window. Reports from other machines and drives are welcome.
+Safely remove, and a long self-test followed to its end. Everything else has run on real drives on one
+machine; reports from other machines and drives are welcome.
