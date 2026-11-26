@@ -100,6 +100,13 @@ class TabBase(QWidget):
             if self.mode is not None:
                 self.set_busy(None)
 
+    def password_words(self):
+        """What a question says about the password: asked once per session, or not at all any more."""
+        s = self.runner.session
+        if s is not None and s.is_open():
+            return "The admin session is open, so no password is asked."
+        return "The system will ask for the admin password, once for this session."
+
     def set_folder(self, path):
         self.panel.set_folder(path)
 

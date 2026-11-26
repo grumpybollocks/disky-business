@@ -172,7 +172,7 @@ class CareTab(TrimTab):
         self.care_device = (d.path, v.device)
         self.care_status.setText(words)
         self.set_busy(mode)
-        self.runner.start(command, v.device, *options)
+        self.runner.start(command, v.device, *options, admin="if_open")
 
     def on_event(self, ev):
         if ev.get("event") == "fs_result":

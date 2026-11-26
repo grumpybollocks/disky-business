@@ -17,6 +17,7 @@ from .drivepanel import DrivePanel
 from .mapmodel import MapModel
 from .mapwidget import BlockMap
 from .runner import EngineRunner
+from .adminsession import AdminSession
 from .caretab import CareTab
 from .defragtab import DefragTab
 from .smarttab import SmartTab
@@ -251,7 +252,7 @@ TIP_SECONDS = 30            # how long one tip stays; long enough to read it and
 class MainWindow(QMainWindow):
     TABS = (TestTab, SpeedTab, SmartTab, DefragTab, CareTab)
 
-    def __init__(self, theme=None, runner=None, drives=None, runners=None):
+    def __init__(self, theme=None, runner=None, drives=None, runners=None, admin=None):
         runners = dict(runners or {})
         if runner is not None:
             runners.setdefault("Test", runner)
@@ -271,8 +272,17 @@ class MainWindow(QMainWindow):
         self.tip_line.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.tabs = QTabWidget()
         self.pages = []
+        # One admin session for the whole window: the password is asked once, not once per job.
+        self.admin = admin or AdminSession(parent=self)
+        self.admin.changed.connect(self.on_admin)
+        self.admin_button = QPushButton("Admin session open: End")
+        self.admin_button.setToolTip("The password was given once for this session. End it now; the next admin "
+                                     "job asks again. It also ends when you close the app")
+        self.admin_button.clicked.connect(self.end_admin)
+        self.admin_button.hide()
         for cls in self.TABS:
             page = cls(self.theme, runner=runners.get(cls.title), tip=self.show_tip, drives=drives)
+            page.runner.session = self.admin
             page.busy_changed.connect(self.on_busy)
             self.pages.append(page)
             self.tabs.addTab(page, cls.title)
@@ -283,7 +293,10 @@ class MainWindow(QMainWindow):
         body = QWidget()
         col = QVBoxLayout(body)
         col.addWidget(self.tabs, 1)
-        col.addWidget(self.tip_line)
+        bottom = QHBoxLayout()
+        bottom.addWidget(self.tip_line, 1)
+        bottom.addWidget(self.admin_button)
+        col.addLayout(bottom)
         self.setCentralWidget(body)
         self.resize(1180, 760)
         if self.remember:                       # open at the size the user left it
@@ -315,6 +328,13 @@ class MainWindow(QMainWindow):
             return
         self.pages[index].panel.adopt(self.pages[self._tab].panel)
         self._tab = index
+
+    def on_admin(self, is_open):
+        self.admin_button.setVisible(is_open)
+
+    def end_admin(self):
+        if not any(p.mode is not None for p in self.pages):     # never under a running job
+            self.admin.end()
 
     def on_busy(self, busy):
         """One job at a time: while a tab works, the others cannot be opened."""
@@ -355,4 +375,5 @@ class MainWindow(QMainWindow):
             QSettings("disky-business", "disky-business").setValue("size", self.size())
         for page in self.pages:
             page.shutdown()
+        self.admin.end()                                # the helper's input closes: it ends with the window
         super().closeEvent(event)

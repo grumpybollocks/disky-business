@@ -27,13 +27,25 @@ class EngineRunner(QObject):
         self.command = list(command or [sys.executable, "-m", "disky"])
         self._proc = None
         self._buf = b""
+        self.session = None                             # the window's AdminSession, when it has one
+
+    def _via_session(self):
+        return self.session is not None and self.session.client is self
 
     def running(self):
-        return self._proc is not None and self._proc.state() != QProcess.NotRunning
+        return self._via_session() or (self._proc is not None and self._proc.state() != QProcess.NotRunning)
 
-    def start(self, mode, folder, *extra, wrap=()):
+    def start(self, mode, folder, *extra, wrap=(), admin=""):
+        """Start one engine job. `wrap` is the password prompt put in front of it. With the window's admin
+        session, a job behind the real prompt goes to the session instead (one password for the whole
+        session); `admin="if_open"` uses the session only when it is already open."""
         if self.running():
             return False
+        s = self.session
+        if s is not None and s.accepts(mode) and ((wrap and list(wrap) == s.prefix) or
+                                                  (admin == "if_open" and s.is_open())):
+            self.last_argv = list(s.prefix) + self.command + [mode, folder, "--json", "--stdin-stop", *extra]
+            return s.start(self, mode, folder, *extra)
         self._buf = b""
         p = QProcess(self)
         env = QProcessEnvironment.systemEnvironment()
@@ -55,7 +67,9 @@ class EngineRunner(QObject):
         """Ask the engine to stop cleanly (it finishes the block in hand and leaves the test files).
 
         A line "stop" on its input works also when it runs with admin rights; a signal from us would not."""
-        if self.running():
+        if self._via_session():
+            self.session.stop()
+        elif self.running():
             self._proc.write(b"stop\n")
             try:
                 os.kill(self._proc.processId(), signal.SIGINT)
@@ -63,7 +77,9 @@ class EngineRunner(QObject):
                 pass                    # an admin process: the line above does it
 
     def kill(self):
-        if self.running():
+        if self._via_session():
+            self.session.stop()
+        elif self.running():
             self._proc.kill()
             self._proc.waitForFinished(2000)
 

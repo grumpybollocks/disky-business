@@ -14,7 +14,7 @@ from disky import frag, safety
 from .drives import fs_name
 from .mapmodel import BAD, GOOD, UNTOUCHED, WRITTEN, MapModel
 from .mapwidget import BlockMap
-from .runner import _ROOT
+from .adminsession import admin_wrap  # noqa: F401  (also imported from here by older code and tests)
 from .tabbase import TabBase
 
 LEGEND = (("free", "Free"), ("other", "Other data"), ("whole", "File in one piece"), ("fragmented", "File in pieces"))
@@ -31,11 +31,6 @@ def size_text(n):
         if n >= step:
             return f"{n / step:.1f} {unit}"
     return f"{n} bytes"
-
-
-def admin_wrap():
-    """Command put in front of the engine when it must read a partition directly."""
-    return ["pkexec", "env", f"PYTHONPATH={_ROOT}", "PYTHONDONTWRITEBYTECODE=1"]
 
 
 def share_text(part, whole):
@@ -157,8 +152,8 @@ class DefragTab(TabBase):
         if self.mode is None and cmd:
             mode, target, wrap = cmd
             if wrap and not self.confirm(
-                    f"Scan {target}?\nReading an exFAT drive directly needs admin rights, so the system will ask "
-                    "for the admin password. The scan only reads; nothing on the drive is changed."):
+                    f"Scan {target}?\nReading an exFAT drive directly needs admin rights. The scan only reads; "
+                    "nothing on the drive is changed. " + self.password_words()):
                 return
             self._begin("scan", "Scanning...")
             self.worst = []

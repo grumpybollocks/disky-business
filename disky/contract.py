@@ -28,6 +28,9 @@ EVENTS = {
     "trim_result": {"mount": STR, "trimmed_bytes": OPT_INT, "message": STR},
     "selftest_progress": {"status": STR, "percent": INT},
     "selftest_result": {"kind": STR, "status": STR, "ok": OPT_BOOL, "message": STR},
+    "helper_ready": {},
+    "helper_done": {"code": INT},
+    "helper_closed": {"reason": STR},
     "smart_data": {"device": STR, "data": DICT},
     "fs_result": {"action": STR, "device": STR, "fs": STR, "ok": BOOL, "message": STR},
     "speed_phase": {"test": STR, "total_bytes": OPT_INT, "seconds": OPT_NUM},
@@ -38,7 +41,7 @@ EVENTS = {
 FRAG_STATES = {"free", "whole", "fragmented", "other"}
 SPEED_TESTS = {"seq_write", "seq_read", "rand_read", "rand_write"}
 PHASES = {"write", "verify"}
-MODES = {"test", "write", "verify", "clean", "speed", "fragscan", "defrag", "fragfiles", "trim", "fscheck", "fsrepair", "smart", "selftest"}
+MODES = {"test", "write", "verify", "clean", "speed", "fragscan", "defrag", "fragfiles", "trim", "fscheck", "fsrepair", "smart", "selftest", "helper"}
 BLOCK_STATES = {"written", "good", "changed", "bad", "overwritten"}
 VERDICTS = {"good", "bad", "not_verified", "nothing_to_check", "stopped"}
 

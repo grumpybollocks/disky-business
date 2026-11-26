@@ -102,6 +102,20 @@ def main():
         say(event="start", contract=1, version="fake", mode="clean", block_bytes=MIB, sector_bytes=512)
         say(event="done", removed_files=1, listed_files=1, kept_files=1 if scenario == "kept" else 0)
         return 0
+    if mode == "helper":
+        # The admin helper: one process, many jobs. Each job is answered by this same pretend engine.
+        say(event="start", contract=1, version="fake", mode=mode, block_bytes=MIB, sector_bytes=512)
+        if scenario == "nopassword":
+            return 126
+        say(event="helper_ready")
+        for line in sys.stdin:
+            line = line.strip()
+            if not line or line == "stop":
+                continue
+            req = json.loads(line)
+            sys.argv[2:] = [req["cmd"], req["target"], "--json", *req["options"]]
+            say(event="helper_done", code=main())
+        return 0
     if mode == "selftest":
         say(event="start", contract=1, version="fake", mode=mode, block_bytes=MIB, sector_bytes=512)
         if scenario == "refuse":

@@ -93,7 +93,7 @@ class TrimTab(TabBase):
     def start(self):
         if self.mode is None and self.facts and self.facts["supported"] and self.confirm(
                 f"Run TRIM on {self.facts['mount']}?\nIt tells the drive which space is free; files are not "
-                "touched. The system will ask for the admin password."):
+                "touched. " + self.password_words()):
             self.error = self.result = None
             self.status.setText("Trimming...")
             self.set_busy("trim")
