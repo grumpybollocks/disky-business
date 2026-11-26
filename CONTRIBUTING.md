@@ -37,7 +37,6 @@ scheme or an engine command is one entry ([docs/BRICKS.md](docs/BRICKS.md)).
 - A long self-test keeps the app busy until it ends or is stopped.
 - Self-tests are not offered for drives in USB cases.
 
-## Not yet tried on real hardware
+## Tried on real hardware
 
-Safely remove. Everything else has run on real drives on one machine; reports from other machines and
-drives are welcome.
+Every feature has run on real drives, on one machine. Reports from other machines and drives are welcome.

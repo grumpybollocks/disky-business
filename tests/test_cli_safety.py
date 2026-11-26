@@ -161,6 +161,7 @@ class CommandLine(unittest.TestCase):
             self.assertLessEqual(len(tip), 110, tip)
             self.assertNotIn("\n", tip)
         self.assertIn("Tip: switching to your pistol is always faster than reloading.", tips.TIPS)
+        self.assertEqual(len(set(tips.TIPS)), len(tips.TIPS))          # no tip twice
 
     def test_sizes(self):
         self.assertEqual(cli.parse_size("500M"), 500 << 20)
