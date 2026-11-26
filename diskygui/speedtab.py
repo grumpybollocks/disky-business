@@ -111,7 +111,8 @@ class SpeedTab(TabBase):
             self.values[test] = value
         grid.setColumnStretch(1, 1)
 
-        self.status = QLabel("Choose a folder, then press Start.")
+        self.status = QLabel("Pick a drive, then press Start.")
+        self.status.setWordWrap(True)                   # a long reason must never force the window wide
         self.status.setObjectName("status")
         self.go = QPushButton("Start")
         self.go.clicked.connect(self.start_or_stop)

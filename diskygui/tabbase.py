@@ -5,7 +5,7 @@ A new tab subclasses TabBase, sets `title` and `NOTE`, builds its right-hand sid
 fills in the hooks at the bottom. Put the class in window.MainWindow.TABS and it appears.
 """
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
 
 from .drivepanel import DrivePanel
 from .runner import EngineRunner
@@ -44,18 +44,21 @@ class TabBase(QWidget):
         box.addWidget(widget)
         return frame
 
-    def legend(self, pairs):
-        """A row of colour squares with labels; pairs = (colour key, label). Colours are set in set_theme."""
-        row = QHBoxLayout()
-        for key, label in pairs:
+    def legend(self, pairs, per_row=4):
+        """Colour squares with labels, `per_row` to a line so a long legend does not force the window wide;
+        pairs = (colour key, label). Colours are set in set_theme."""
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(6)
+        grid.setVerticalSpacing(3)
+        for i, (key, label) in enumerate(pairs):
             sw = QLabel()
             sw.setFixedSize(13, 13)
             self.swatches.append((sw, key))
-            row.addWidget(sw)
-            row.addWidget(QLabel(label))
-            row.addSpacing(10)
-        row.addStretch(1)
-        return row
+            grid.addWidget(sw, i // per_row, 3 * (i % per_row))
+            grid.addWidget(QLabel(label), i // per_row, 3 * (i % per_row) + 1)
+            grid.setColumnMinimumWidth(3 * (i % per_row) + 2, 10)
+        grid.setColumnStretch(3 * per_row, 1)
+        return grid
 
     def paint_legend(self, colours):
         for sw, key in self.swatches:

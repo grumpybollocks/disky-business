@@ -62,13 +62,15 @@ class TestTab(TabBase):
         legend = self.legend(LEGEND)
         self.paint_legend(theme.states)
 
-        self.status = QLabel("Choose a folder, then press Start.")
+        self.status = QLabel("Pick a drive, then press Start.")
+        self.status.setWordWrap(True)                   # a long reason must never force the window wide
         self.status.setObjectName("status")
         self.verdict = QFrame()
         self.verdict.setObjectName("verdict")
         self.verdict_mark = QLabel()
         self.verdict_mark.setFixedSize(34, 34)
         self.verdict_title = QLabel()
+        self.verdict_title.setWordWrap(True)
         self.verdict_title.setObjectName("verdict_title")
         self.verdict_detail = QLabel()
         self.verdict_detail.setWordWrap(True)
@@ -243,6 +245,9 @@ class TestTab(TabBase):
         self.stack.setCurrentWidget(self.verdict)
 
 
+TIP_SECONDS = 30            # how long one tip stays; long enough to read it and get the joke
+
+
 class MainWindow(QMainWindow):
     TABS = (TestTab, SpeedTab, SmartTab, DefragTab, CareTab)
 
@@ -261,6 +266,7 @@ class MainWindow(QMainWindow):
         self.theme_button.setObjectName("themebutton")
         self.theme_button.clicked.connect(self.next_theme)
         self.tip_line = QLabel()
+        self.tip_line.setWordWrap(True)
         self.tip_line.setObjectName("tipline")
         self.tip_line.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.tabs = QTabWidget()
@@ -280,11 +286,15 @@ class MainWindow(QMainWindow):
         col.addWidget(self.tip_line)
         self.setCentralWidget(body)
         self.resize(1180, 760)
+        if self.remember:                       # open at the size the user left it
+            size = QSettings("disky-business", "disky-business").value("size")
+            if size is not None and hasattr(size, "isValid") and size.isValid():
+                self.resize(size)
         self._tip_no = int.from_bytes(os.urandom(2), "big") % len(tips.TIPS)
         self._held = False
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.next_tip)
-        self._timer.start(15000)
+        self._timer.start(TIP_SECONDS * 1000)
         self.next_tip()
 
     def _apply_font(self):
@@ -341,6 +351,8 @@ class MainWindow(QMainWindow):
             self.tip_line.setText(text)
 
     def closeEvent(self, event):
+        if self.remember and not self.isMaximized():
+            QSettings("disky-business", "disky-business").setValue("size", self.size())
         for page in self.pages:
             page.shutdown()
         super().closeEvent(event)

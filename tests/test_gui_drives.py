@@ -234,6 +234,42 @@ class InTheWindow(unittest.TestCase):
         self.assertEqual(asked, ["EXAMPLE SSD"])                    # nothing is asked of a drive with no SMART
         self.assertEqual(tab.health.text(), "No health data: this USB case does not pass it on.")
 
+    def test_a_long_reason_never_forces_the_window_wide(self):
+        long_reason = dr.Drive("EXAMPLE WINDOWS DISK", 250 << 30, "HDD", True, dr.Health(),
+                               [dr.Volume("sdz2", 250 << 30, "ntfs", ["/run/media/someone/WIN"], False)])
+        tab = self.open([long_reason])
+        win = tab.window()
+        win.show()                                      # a hidden window does not work out its layout
+        self.app.processEvents()
+        before = win.minimumSizeHint().width()
+        for page in win.pages:
+            win.tabs.setCurrentWidget(page)
+            page.panel.drive_list.setCurrentRow(0)
+            page.panel.settle()
+            self.app.processEvents()
+            self.assertLess(win.minimumSizeHint().width(), 800, page.title)
+            self.assertLess(win.minimumSizeHint().width(), before + 120, page.title)
+        self.assertGreater(len(win.pages[0].status.text()), 150)        # the long reason is really on screen
+        self.assertIn("NTFS", win.pages[0].status.text())
+        # The tip line at the bottom was the real cause: a long tip or message must wrap, not widen the window.
+        from disky import tips
+        for text in list(tips.TIPS) + ["A long message from the engine. " * 12]:
+            win.show_tip(text)
+            self.app.processEvents()
+            self.assertLess(win.minimumSizeHint().width(), 800, text[:40])
+        self.assertLess(before, 800)                                    # fits a small laptop screen
+
+    def test_the_open_tab_stands_out_in_every_look(self):
+        from diskygui.chrome import stylesheet
+        for theme in THEMES.values():
+            css = stylesheet(theme)
+            on = css.split("QTabBar::tab:selected {")[1].split("}")[0]
+            off = css.split("QTabBar::tab {")[1].split("}")[0]
+            picture = lambda rule: rule.split("border-image: url(")[1].split(")")[0]  # noqa: E731
+            self.assertNotEqual(picture(on), picture(off), theme.name)
+            with open(picture(on), "rb") as a, open(picture(off), "rb") as b:
+                self.assertNotEqual(a.read(), b.read(), theme.name)     # really drawn differently
+
     def test_no_drives_still_lets_you_choose_a_folder(self):
         tab = self.open([])
         self.assertIn("not available", tab.health.text())

@@ -101,7 +101,8 @@ def stylesheet(t):
     field = _edge("field", t, t.shadow, t.dark, t.light2, t.light, t.field)
     well = _edge("well", t, t.shadow, t.dark, t.light2, t.light, t.map_bg)
     sunk = _edge("sunk", t, t.shadow, t.face, t.face, t.light, t.face)
-    tab = _edge("tab", t, t.light, t.light2, t.shadow, t.dark, t.face, open_bottom=True)
+    tab = _edge("tab", t, t.light, t.light2, t.shadow, t.dark, t.tab_off or t.face, open_bottom=True)
+    tab_on = _edge("tabon", t, t.light, t.light2, t.shadow, t.dark, t.tab_on or t.face, open_bottom=True)
     up = _arrow("up", t, [(1, 5), (4, 2), (7, 5)])
     down = _arrow("down", t, [(1, 3), (4, 6), (7, 3)])
     px, bold = text_look(t)[0], ("bold" if t.bold_ui else "normal")
@@ -116,7 +117,8 @@ QPushButton:disabled {{ color: {t.shadow}; }}
 QTabWidget::pane {{ border: 2px solid transparent; border-image: url({raised}) 2 2 2 2 stretch; top: -2px; }}
 QTabBar::tab {{ border: 2px solid transparent; border-bottom: 0px; border-image: url({tab}) 2 2 0 2 stretch;
                padding: 3px 12px 3px 12px; margin-top: 2px; font-weight: {bold}; }}
-QTabBar::tab:selected {{ margin-top: 0px; padding-bottom: 5px; }}
+QTabBar::tab:selected {{ margin-top: 0px; padding-bottom: 5px; color: {t.tab_on_text or t.text};
+                        border-image: url({tab_on}) 2 2 0 2 stretch; }}
 QTabBar::tab:disabled {{ color: {t.shadow}; }}
 QLineEdit, QListWidget, #verdict {{ color: {t.field_text}; background: {t.field}; border: 2px solid transparent;
                                    border-image: url({field}) 2 2 2 2 stretch; padding: 1px; }}

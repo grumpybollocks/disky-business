@@ -26,6 +26,9 @@ class Theme:
     font_px: int = 13
     smooth: bool = True                          # False = crisp letters without smoothing
     bold_ui: bool = True                         # bold buttons, tabs and headings
+    tab_on: str = ""                             # fill of the selected tab ("" = the window colour)
+    tab_on_text: str = ""                        # its text ("" = the normal text colour)
+    tab_off: str = ""                            # fill of the other tabs ("" = the window colour)
     crisp_fonts: tuple = ()                      # fonts that read well without smoothing at font_px
     fallback_px: int = 0                         # size used, smoothed, when none of crisp_fonts is installed
 
@@ -42,6 +45,7 @@ W98 = Theme(
     },
     frag={"free": "#e4e4e4", "other": "#808080", "whole": "#000080", "fragmented": "#e00000"},
     light2="#dfdfdf",
+    tab_off="#a4a4a4",                           # the tabs behind are darker, so the open one stands out
     # The real font was MS Sans Serif at 11 pixels. It is used when installed; else the closest free one.
     fonts=("MS Sans Serif", "Microsoft Sans Serif", "Tahoma", "W95FA", "Liberation Sans", "Arimo", "Nimbus Sans"),
     font_px=11, smooth=False, bold_ui=False,
@@ -61,6 +65,7 @@ DARK = Theme(
     },
     frag={"free": "#313244", "other": "#6c7086", "whole": "#f5e0dc", "fragmented": "#fab387"},
     light2="#313244",
+    tab_on="#89b4fa", tab_on_text="#11111b",
 )
 
 # Deep violet. Own colours.
@@ -75,6 +80,7 @@ VIOLET = Theme(
     },
     frag={"free": "#3a2d66", "other": "#6a5aa0", "whole": "#c9b6ff", "fragmented": "#ffb347"},
     light2="#3a2d66",
+    tab_on="#a06bff", tab_on_text="#ffffff",
 )
 
 THEMES = {t.name: t for t in (W98, DARK, VIOLET)}

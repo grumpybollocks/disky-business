@@ -216,5 +216,11 @@ class Window(unittest.TestCase):
         self.assertIsNone(tab.mode)
 
 
+    def test_a_tip_stays_long_enough_to_read(self):
+        from diskygui import window
+        tab = self.open("good")
+        self.assertGreaterEqual(window.TIP_SECONDS, 25)
+        self.assertEqual(tab.window()._timer.interval(), window.TIP_SECONDS * 1000)
+
 if __name__ == "__main__":
     unittest.main()

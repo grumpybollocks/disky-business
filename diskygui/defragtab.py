@@ -66,7 +66,7 @@ class DefragTab(TabBase):
         self.files = QListWidget()
         self.files.setFixedHeight(170)
         self.files.itemSelectionChanged.connect(self.update_buttons)
-        self.status = QLabel("Choose a folder, then press Scan.")
+        self.status = QLabel("Pick a drive, then press Scan.")
         self.status.setObjectName("status")
         self.status.setWordWrap(True)
         self.scan_button = QPushButton("Scan")
