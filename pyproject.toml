@@ -22,3 +22,6 @@ disky-business = "diskygui.__main__:main"
 
 [tool.setuptools]
 packages = ["disky", "diskygui"]
+
+[tool.setuptools.package-data]
+diskygui = ["icon.svg"]

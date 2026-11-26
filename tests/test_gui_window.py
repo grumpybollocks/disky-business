@@ -222,5 +222,18 @@ class Window(unittest.TestCase):
         self.assertGreaterEqual(window.TIP_SECONDS, 25)
         self.assertEqual(tab.window()._timer.interval(), window.TIP_SECONDS * 1000)
 
+    def test_the_app_has_an_icon_and_names_its_menu_entry(self):
+        from PySide6.QtGui import QIcon
+        from diskygui import __main__ as start
+        self.assertTrue(os.path.isfile(start.ICON))
+        self.assertFalse(QIcon(start.ICON).pixmap(64, 64).isNull())           # it really draws
+        with open(os.path.join(os.path.dirname(start.ICON), "..", "packaging", "disky-business.desktop")) as f:
+            entry = f.read()
+        self.assertIn("Icon=disky-business", entry)
+        import inspect
+        source = inspect.getsource(start.main)
+        self.assertIn('setDesktopFileName("disky-business")', source)        # the menu entry's file name
+        self.assertIn("setWindowIcon", source)
+
 if __name__ == "__main__":
     unittest.main()
