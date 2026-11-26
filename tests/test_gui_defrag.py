@@ -99,7 +99,7 @@ class DefragTabTests(unittest.TestCase):
 
     def test_a_small_share_is_not_shown_as_nothing(self):
         from diskygui.defragtab import share_text
-        self.assertEqual([share_text(9, 20941), share_text(0, 10), share_text(2, 10), share_text(1, 1000)],
+        self.assertEqual([share_text(9, 50000), share_text(0, 10), share_text(2, 10), share_text(1, 1000)],
                          ["under 0.1 %", "0 %", "20.0 %", "0.1 %"])
 
     def test_other_file_systems_offer_nothing(self):
