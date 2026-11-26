@@ -86,7 +86,7 @@ class DefragTabTests(unittest.TestCase):
         tab.scan_command = lambda: ("fragscan", "/a/folder", ())
         self.scan(tab)
         self.assertIn("2 of 10 files", tab.status.text())
-        self.assertIn("No defragmenter is offered for exfat", tab.status.text())
+        self.assertIn("No defragmenter is offered for exFAT", tab.status.text())
         tab.files.setCurrentRow(0)
         self.assertFalse(tab.defrag_button.isEnabled())
         tab.defrag_selected()
@@ -97,11 +97,16 @@ class DefragTabTests(unittest.TestCase):
         bad = [i for i, s in enumerate(tab.map._shown.tolist()) if s == mm.BAD]
         self.assertEqual({tab.map.blocks_of(i)[0] for i in bad}, {310})             # and it shows on the map
 
+    def test_a_small_share_is_not_shown_as_nothing(self):
+        from diskygui.defragtab import share_text
+        self.assertEqual([share_text(9, 20941), share_text(0, 10), share_text(2, 10), share_text(1, 1000)],
+                         ["under 0.1 %", "0 %", "20.0 %", "0.1 %"])
+
     def test_other_file_systems_offer_nothing(self):
         tab = self.open("good", "vfat")
         self.assertFalse(tab.scan_button.isEnabled())
         self.assertIsNone(tab.scan_command())
-        self.assertIn("No fragmentation information for vfat", tab.status.text())
+        self.assertIn("No fragmentation information for FAT", tab.status.text())
 
     def test_no_password_and_errors_are_said_plainly(self):
         tab = self.open("nopassword", "btrfs")
