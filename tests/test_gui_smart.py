@@ -167,6 +167,18 @@ class Reader(unittest.TestCase):
         self.assertEqual(got, {"Life used": "3 %", "Spare space left": "100 %", "Data errors it could not fix": "0",
                                "Hours switched on": "500 hours", "Data written": "512.0 GB", "Temperature": "38 °C"})
 
+    def test_smartctl_overall_verdict_warnings_and_cold_drives(self):
+        cold = [{"id": 194, "name": "Temperature_Celsius", "value": 100, "worst": 100, "thresh": 0,
+                 "flags": {"prefailure": False}, "raw": {"value": 281470681743355, "string": "-5 (Min/Max -10/40)"}}]
+        rows = smart.smartctl_rows({"smart_status": {"passed": False}, "ata_smart_attributes": {"table": cold}})
+        self.assertEqual([(r.name, r.value, r.status) for r in rows],
+                         [("The drive's own verdict", "FAILED", "FAILING"), ("Temperature", "-5 °C", "OK")])
+        ok = smart.smartctl_rows({"smart_status": {"passed": True}, "ata_smart_attributes": {"table": cold}})
+        self.assertEqual([r.name for r in ok], ["Temperature"])
+        nv = {"critical_warning": 4, "percentage_used": 3}
+        rows = smart.smartctl_rows({"smart_status": {"passed": True}, "nvme_smart_health_information_log": nv})
+        self.assertEqual([(r.name, r.bad) for r in rows], [("Critical warning", True), ("Life used", False)])
+
     def test_no_smart_or_no_answer(self):
         def never(*a, **k):
             raise AssertionError("must not ask")
@@ -274,6 +286,10 @@ class Tab(unittest.TestCase):
         tab.panel.drive_list.setCurrentRow(1)
         tab.panel.drive_list.setCurrentRow(0)
         self.assertEqual(len(tab.rows), 1)                          # kept for the session, not asked again
+        asked.clear()
+        tab.confirm = lambda text: asked.append(text) or False
+        tab.again.click()                                           # fresh values mean asking smartctl again
+        self.assertEqual(len(asked), 1)
 
     def test_usb_read_refused_or_no_password_is_said_plainly(self):
         for scenario, words in (("refuse", "gives no SMART data through its USB case"),
@@ -306,6 +322,8 @@ class Tab(unittest.TestCase):
         self.finish(tab)
         self.assertEqual(tab.runner.last_argv[-6:], ["selftest", "sdy", "--json", "--stdin-stop", "--kind", "short"])
         self.assertEqual(tab.test_status.text(), "Self-test: Passed: the drive found no problem.")
+        tab.panel.drive_list.setCurrentRow(0)
+        self.assertEqual(tab.test_status.text(), "")               # not shown beside another drive
 
     def test_a_failed_refused_or_stopped_self_test_is_said_plainly(self):
         import time

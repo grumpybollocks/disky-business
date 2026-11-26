@@ -82,7 +82,8 @@ starts it (asking for the admin password itself), and the engine follows it. Sto
 
 ## Check and repair (added 2026-11-26, still contract version 1)
 
-`disky fscheck <partition>` and `disky fsrepair <partition>` (a name like `sdb1`). Both ask the system's drive
+`disky fscheck <partition>` and `disky fsrepair <partition> --yes` (a name like `sdb1`; without `--yes` a
+repair is refused, so it never happens by a slip). Both ask the system's drive
 service, which runs the file system's own tool and asks for the admin password itself where the system wants
 one. `fscheck` only reads; `fsrepair` changes the drive. Neither runs on a mounted partition or on NTFS: that
 is an `error` with code `refused` and the reason in `message`. There is no Stop for these two.

@@ -83,7 +83,7 @@ class SmartTab(TabBase):
         self.show_all = QCheckBox("Show all items")
         self.show_all.toggled.connect(self.fill)
         self.again = QPushButton("Read again")
-        self.again.clicked.connect(self.load)
+        self.again.clicked.connect(self.read_again)
         self.short_button = QPushButton("Short self-test")
         self.short_button.setToolTip("The drive tests itself for a few minutes. Only reads")
         self.short_button.clicked.connect(self.short_test)
@@ -115,7 +115,16 @@ class SmartTab(TabBase):
         self.update_buttons()
 
     def on_folder(self, _folder, _hint):
+        if self.mode is None:
+            self.test_status.setText("")                # a self-test result belongs to the drive it ran on
         self.load()
+
+    def read_again(self):
+        d = self.panel.current_drive()
+        if d is not None and not d.smart and d.path in self.by_password:
+            self.read_with_password()                   # fresh values need smartctl, and the password, again
+        else:
+            self.load()
 
     def load(self):
         d = self.panel.current_drive()

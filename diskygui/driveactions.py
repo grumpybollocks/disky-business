@@ -12,7 +12,8 @@ from .drives import NTFS
 
 _BUS = "org.freedesktop.UDisks2"
 _BLOCK = "/org/freedesktop/UDisks2/block_devices/"
-SYSTEM_PLACES = ("/", "/boot", "/home", "/usr", "/var", "/etc", "/opt", "/root", "/srv")
+SYSTEM_PLACES = ("/", "/boot", "/efi", "/home", "/usr", "/var", "/etc", "/opt", "/root", "/srv", "/tmp", "/nix")
+_SYSTEM_TREES = ("/boot", "/efi", "/usr", "/var", "/opt", "/nix")
 
 # The service's error names, in plain words.
 ERRORS = (
@@ -32,7 +33,7 @@ def in_system_use(volume, home=None):
     """True for a partition the running system or the home folder lives on: never unmounted from here."""
     home = os.path.realpath(home or os.path.expanduser("~"))
     for m in volume.mounts:
-        if m in SYSTEM_PLACES or any(m.startswith(p + "/") for p in ("/boot", "/usr", "/var")):
+        if m in SYSTEM_PLACES or any(m.startswith(p + "/") for p in _SYSTEM_TREES):
             return True
         if home == m or home.startswith(m.rstrip("/") + "/"):
             return True
@@ -75,7 +76,8 @@ def can_unmount(drive, home=None):
 
 def can_remove(drive, home=None):
     """Safely remove (unmount everything, then switch the drive off): USB drives the system does not live on."""
-    return drive.usb and bool(drive.path) and not any(in_system_use(v, home) for v in drive.volumes)
+    return (drive.usb and bool(drive.path) and not drive.other_use
+            and not any(in_system_use(v, home) for v in drive.volumes))
 
 
 def mount(drive, run=subprocess.run):
@@ -106,6 +108,8 @@ def unmount(drive, run=subprocess.run, home=None):
 
 
 def remove(drive, run=subprocess.run, home=None):
+    if drive.other_use:
+        return False, f"It is in use as {drive.other_use}. Switch that off first."
     if not can_remove(drive, home):
         return False, "Only USB drives the system does not run from can be switched off here."
     if can_unmount(drive, home):

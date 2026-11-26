@@ -31,9 +31,10 @@ def advice(volume, home=None):
     return True, READY
 
 
-def repair_question(volume, last_check, failing):
-    """What the user reads before a repair starts: only the warnings that apply."""
-    lines = [f"Repair {volume.device} ({fs_name(volume.fstype)})?", "",
+def repair_question(volume, last_check, failing, drive=""):
+    """What the user reads before a repair starts: which drive, and only the warnings that apply."""
+    where = f" on {drive}" if drive else ""
+    lines = [f"Repair {volume.device} ({fs_name(volume.fstype)}, {size_text(volume.size)}){where}?", "",
              "Repair changes the drive. If files on it matter and you can still read them, copy them off first: "
              "a repair can remove damaged files.",
              "Once started it cannot be stopped. Do not unplug the drive while it runs."]
@@ -55,7 +56,8 @@ class CareTab(TrimTab):
 
     def extend(self, right):
         self.volumes = []
-        self.checked = {}                               # partition -> what the last check in this session found
+        self.checked = {}                               # (drive, partition) -> what its last check here found
+        self.shown_drive = None
         self.care_result = None
         about = QLabel(ABOUT)
         about.setWordWrap(True)
@@ -101,6 +103,9 @@ class CareTab(TrimTab):
         super().on_folder(folder, hint)
         if self.mode is None:
             d = self.panel.current_drive()
+            if (d.path if d else None) != self.shown_drive:
+                self.shown_drive = d.path if d else None
+                self.care_status.setText("")            # a result belongs to the drive it was got from
             before = self.picked().device if self.picked() else None
             self.volumes = list(d.volumes) if d else []
             self.parts.blockSignals(True)
@@ -134,27 +139,40 @@ class CareTab(TrimTab):
             self.repair_button.setEnabled(ready)
 
     # -- check and repair ------------------------------------------------------------------------------------
+    def still_there(self):
+        """(drive, partition) as they are now, or None after saying why not. Read again from the system each
+        time: a name like sdb1 can belong to another drive once drives were unplugged and plugged in."""
+        v, d = self.picked(), self.panel.current_drive()
+        if v is None or d is None or not advice(v)[0] or self.mode is not None:
+            return None
+        now = self.panel.fresh(d)
+        same = next((x for x in now.volumes if x.device == v.device), None) if now else None
+        if same is None or (same.fstype, same.size) != (v.fstype, v.size) or not advice(same)[0]:
+            self.panel.load_drives()                    # shows the drives as they are; nothing stays picked
+            self.care_status.setText("The drives changed since the list was read. Pick the drive again.")
+            return None
+        return now, same
+
     def check(self):
-        self._care("check", "fscheck", "Checking... this only reads.")
+        found = self.still_there()
+        if found:
+            self._care("check", "fscheck", "Checking... this only reads.", *found)
 
     def repair(self):
-        v = self.picked()
-        d = self.panel.current_drive()
-        if v is None or not advice(v)[0] or self.mode is not None:
+        found = self.still_there()
+        if not found:
             return
-        failing = bool(d and d.health.state == "failing")
-        if self.confirm(repair_question(v, self.checked.get(v.device), failing)):
-            self._care("repair", "fsrepair", "Repairing... do not unplug the drive.")
+        d, v = found
+        if self.confirm(repair_question(v, self.checked.get((d.path, v.device)), d.health.state == "failing",
+                                        d.model)):
+            self._care("repair", "fsrepair", "Repairing... do not unplug the drive.", d, v, "--yes")
 
-    def _care(self, mode, command, words):
-        v = self.picked()
-        if v is None or not advice(v)[0] or self.mode is not None:
-            return
+    def _care(self, mode, command, words, d, v, *options):
         self.error = self.care_result = None
-        self.care_device = v.device
+        self.care_device = (d.path, v.device)
         self.care_status.setText(words)
         self.set_busy(mode)
-        self.runner.start(command, v.device)
+        self.runner.start(command, v.device, *options)
 
     def on_event(self, ev):
         if ev.get("event") == "fs_result":

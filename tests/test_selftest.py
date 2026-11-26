@@ -16,8 +16,8 @@ ATA = "org.freedesktop.UDisks2.Drive.Ata"
 class Service:
     """Answers busctl. `course` is the list of (status, percent remaining) the drive reports, one per update."""
 
-    def __init__(self, course, iface=ATA, start_error=""):
-        self.course, self.iface, self.start_error = list(course), iface, start_error
+    def __init__(self, course, iface=ATA, start_error="", deaf=False):
+        self.course, self.iface, self.start_error, self.deaf = list(course), iface, start_error, deaf
         self.now = ("success", 0)
         self.calls = []
 
@@ -35,6 +35,8 @@ class Service:
         self.calls.append((method, cmd[cmd.index("call") + 6] if method == "SmartSelftestStart" else None))
         if method == "SmartSelftestStart" and self.start_error:
             return subprocess.CompletedProcess(cmd, 1, "", self.start_error)
+        if method == "SmartUpdate" and self.deaf:
+            return subprocess.CompletedProcess(cmd, 1, "", "org.freedesktop.UDisks2.Error.Failed: no answer")
         if method == "SmartUpdate" and self.course:
             self.now = self.course.pop(0)
         return ok()
@@ -54,9 +56,19 @@ class Rules(unittest.TestCase):
         self.assertEqual(s.calls[0], ("SmartSelftestStart", "short"))
         self.assertEqual([e["percent"] for e in seen], [0, 10, 60])            # each step said once
         self.assertEqual([p for e in seen for p in contract.problems(e)], [])
-        s = Service([("error_read", 30)], iface="org.freedesktop.UDisks2.NVMe.Controller")
+        s = Service([("known_seg_fail", 30)], iface="org.freedesktop.UDisks2.NVMe.Controller")
         result, _ = go(s, "long")
-        self.assertEqual((result, s.calls[0]), ((False, "error_read"), ("SmartSelftestStart", "extended")))
+        self.assertEqual((result, s.calls[0]), ((False, "known_seg_fail"), ("SmartSelftestStart", "extended")))
+        for word in ("fatal_error", "unknown_seg_fail", "error_read", "fatal"):
+            self.assertIs(selftest.RESULT[word][0], False, word)        # every failure word means FAILED
+            self.assertIn("FAILED", selftest.RESULT[word][1])
+
+    def test_an_old_answer_is_never_taken_for_the_new_tests_result(self):
+        s = Service([], deaf=True)              # the last test's "success" is all the service can show
+        with self.assertRaises(selftest.Refused) as e:
+            go(s)
+        self.assertIn("stopped answering", str(e.exception))
+        self.assertEqual(sum(1 for m, _ in s.calls if m == "SmartUpdate"), selftest.STALE_LIMIT)
 
     def test_stop_aborts_the_test_on_the_drive(self):
         stop = threading.Event()

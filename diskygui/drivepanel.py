@@ -36,6 +36,7 @@ class DrivePanel(QWidget):
         self.actions = driveactions                     # replaced in tests
         self.read_smart = smart.read                    # replaced in tests
         self.busy = False
+        self.acting = False
         self.mount_button = QPushButton("Mount")
         self.mount_button.setToolTip("Make the drive's files reachable")
         self.unmount_button = QPushButton("Unmount")
@@ -87,15 +88,15 @@ class DrivePanel(QWidget):
         self.load_drives()
 
     def load_drives(self):
-        picked = bool(self.folder) and self.row() >= 0
+        picked = self.row() >= 0
         self.drive_list.blockSignals(True)
         self.drives = self.read_drives()
         self.drive_list.clear()
         self.drive_list.addItems([d.label for d in self.drives])
         self.drive_list.blockSignals(False)
         self.health.setText("" if self.drives else "Drive list not available. Choose a folder below.")
-        if picked:                      # the list was read again: the drive picked before is no longer picked
-            self.set_folder("", "")
+        if picked:                      # the list was read again: the drive picked before is no longer picked,
+            self.set_folder("", "")     # and every tab is told, also when it had no folder (an unmounted drive)
         self.update_actions()
 
     def update_actions(self):
@@ -104,6 +105,11 @@ class DrivePanel(QWidget):
         self.mount_button.setEnabled(bool(d and self.actions.can_mount(d)))
         self.unmount_button.setEnabled(bool(d and self.actions.can_unmount(d)))
         self.remove_button.setEnabled(bool(d and self.actions.can_remove(d)))
+
+    def fresh(self, drive):
+        """The same drive read again from the system, or None when it is gone. Device names like sdb are
+        handed out again to other drives, so nothing is done on the strength of an old list."""
+        return next((x for x in self.read_drives() if x.path and x.path == drive.path), None)
 
     def do_mount(self):
         self.act("mount")
@@ -117,16 +123,22 @@ class DrivePanel(QWidget):
     def act(self, job):
         """Run one drive action, say what happened, and show the drive's new state."""
         d = self.current_drive()
-        if d is None or self.busy:
+        if d is None or self.busy or self.acting:
             return
+        self.acting = True                              # a second click while this one works does nothing
         self.action_note.setText({"mount": "Mounting...", "unmount": "Unmounting...",
                                   "remove": "Switching off..."}[job])
         QApplication.setOverrideCursor(Qt.WaitCursor)
         QApplication.processEvents()
         try:
-            _done, message = getattr(self.actions, job)(d)
+            now = self.fresh(d)                         # the drive as it is now, not as it was listed
+            if now is None:
+                message = "That drive is no longer there."
+            else:
+                _done, message = getattr(self.actions, job)(now)
         finally:
             QApplication.restoreOverrideCursor()
+            self.acting = False
         self.load_drives()
         same = next((i for i, x in enumerate(self.drives) if x.path and x.path == d.path), -1)
         if same >= 0:

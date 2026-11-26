@@ -27,7 +27,17 @@ RESULT = {
     "error_servo": (False, "FAILED (head positioning). Back up this drive now."),
     "error_read": (False, "FAILED (reading). Back up this drive now."),
     "error_handling": (False, "FAILED (the drive may have been damaged in handling). Back up this drive now."),
+    # NVMe drives use these words (the drive service's documentation, NVMe.Controller.SmartSelftestStatus).
+    "fatal_error": (False, "FAILED: the drive could not finish its self-test. Back up this drive now."),
+    "known_seg_fail": (False, "FAILED: a part of the drive failed its test. Back up this drive now."),
+    "unknown_seg_fail": (False, "FAILED: a part of the drive failed its test. Back up this drive now."),
+    "ctrl_reset": (None, "The self-test was interrupted (the drive was reset)."),
+    "ns_removed": (None, "The self-test was interrupted (the drive's storage area was removed)."),
+    "aborted_format": (None, "The self-test was interrupted (the drive was being formatted)."),
+    "aborted_sanitize": (None, "The self-test was interrupted (the drive was being wiped)."),
+    "aborted_unknown": (None, "The self-test was stopped, the drive does not say why."),
 }
+STALE_LIMIT = 12                # this many rounds without a fresh answer (about a minute) and we stop waiting
 
 
 class Refused(Exception):
@@ -69,15 +79,17 @@ def find(device, run=proc.run):
 
 
 def state(path, iface, run=proc.run):
-    """(status word, percent done or None) after asking the drive for fresh values."""
+    """(status word, percent done or None, fresh). `fresh` is False when the drive could not be asked just now:
+    the values are then old ones, possibly from an earlier test, and must not be judged."""
+    fresh = True
     try:
         _bus(["call", _BUS, path, iface, "SmartUpdate", "a{sv}", "0"], run)
     except Refused:
-        pass                                    # stale values are still values; the next round asks again
+        fresh = False
     status = _bus(["get-property", _BUS, path, iface, "SmartSelftestStatus"], run) or ""
     left = _bus(["get-property", _BUS, path, iface, "SmartSelftestPercentRemaining"], run)
     done = 100 - left if isinstance(left, int) and 0 <= left <= 100 else None
-    return status, done
+    return status, done, fresh
 
 
 def run_test(device, kind, emit, stop=None, run=proc.run, sleep=time.sleep, every=5.0):
@@ -86,7 +98,7 @@ def run_test(device, kind, emit, stop=None, run=proc.run, sleep=time.sleep, ever
     path, iface = find(device, run)
     _bus(["call", _BUS, path, iface, "SmartSelftestStart", "sa{sv}", KINDS[kind], "0"], run, timeout=120)
     emit({"event": "selftest_progress", "status": "inprogress", "percent": 0})
-    status, last = "inprogress", 0
+    status, last, stale = "inprogress", 0, 0
     while status == "inprogress":
         waited = 0.0
         while waited < every and not (stop is not None and stop.is_set()):
@@ -98,7 +110,15 @@ def run_test(device, kind, emit, stop=None, run=proc.run, sleep=time.sleep, ever
             except Refused as e:
                 raise Refused(f"The self-test could not be stopped; it goes on inside the drive. ({e})") from None
             return None, "aborted"
-        status, done = state(path, iface, run)
+        status, done, fresh = state(path, iface, run)
+        if not fresh:                           # an old answer says nothing about the test just started
+            stale += 1
+            if stale >= STALE_LIMIT:
+                raise Refused("The drive stopped answering about its self-test. The test may still be running "
+                              "inside the drive; read its SMART record again later.")
+            status = "inprogress"
+            continue
+        stale = 0
         if status == "inprogress" and done is not None and done != last:
             last = done
             emit({"event": "selftest_progress", "status": status, "percent": done})

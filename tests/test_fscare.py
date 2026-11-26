@@ -66,15 +66,33 @@ class Rules(unittest.TestCase):
             out = io.StringIO()
             with mock.patch.object(fscare.proc, "run", run), mock.patch.object(fscare.act, "__defaults__", (run, 6 * 3600)), \
                     mock.patch.object(fscare.facts, "__defaults__", (run,)), redirect_stdout(out):
-                got = cli.main([cmd, "sdz1", "--json"])
+                got = cli.main([cmd, "sdz1", "--json"] + (["--yes"] if cmd == "fsrepair" else []))
             events = [json.loads(line) for line in out.getvalue().splitlines()]
             self.assertEqual([p for e in events for p in contract.problems(e)], [])
             self.assertEqual((got, events[1]["event"], events[1]["ok"]), (code, "fs_result", answer))
         run, _ = service(fs="ntfs")
         out = io.StringIO()
         with mock.patch.object(fscare.act, "__defaults__", (run, 1)), redirect_stdout(out):
-            self.assertEqual(cli.main(["fsrepair", "sdz1", "--json"]), 3)
+            self.assertEqual(cli.main(["fsrepair", "sdz1", "--json", "--yes"]), 3)
         self.assertIn("refused", out.getvalue())
+
+    def test_repair_from_the_command_line_needs_yes(self):
+        run, called = service()
+        out = io.StringIO()
+        with mock.patch.object(fscare.act, "__defaults__", (run, 1)), \
+                mock.patch.object(fscare.facts, "__defaults__", (run,)), redirect_stdout(out):
+            self.assertEqual(cli.main(["fsrepair", "sdz1", "--json"]), 3)
+        self.assertEqual(called, [])
+        self.assertIn("add --yes", out.getvalue())
+
+    def test_no_answer_about_the_result_is_said_not_crashed(self):
+        def run(cmd, **kw):
+            if "get-property" in cmd:
+                return subprocess.CompletedProcess(cmd, 0, json.dumps({"data": "vfat" if cmd[-1] == "IdType" else []}), "")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        with self.assertRaises(fscare.Refused) as e:
+            fscare.act("repair", "sdz1", run)
+        self.assertIn("gave no answer", str(e.exception))
 
 
 if __name__ == "__main__":

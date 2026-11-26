@@ -30,6 +30,13 @@ scheme or an engine command is one entry ([docs/BRICKS.md](docs/BRICKS.md)).
 - **No personal details** in code, documents or pictures: no user names, host names, drive serial numbers.
 - Connect Qt signals to plain methods, not to lambdas that hold the widget (that crashed on exit).
 
+## Known limits
+
+- Mount, Unmount, Safely remove and the health box wait for the system on the window's own thread: a slow or
+  sleeping drive can freeze the window for some seconds.
+- A long self-test keeps the app busy until it ends or is stopped.
+- Self-tests are not offered for drives in USB cases.
+
 ## Not yet tried on real hardware
 
 Repair of a file system that is really damaged, Safely remove, stopping a self-test midway, a long self-test,

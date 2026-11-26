@@ -79,5 +79,8 @@ def act(action, device, run=proc.run, timeout=6 * 3600):
         raise Refused("The system took too long to answer. The drive may be failing; look at the SMART tab.")
     if done.returncode != 0:
         raise Refused(_plain(done.stderr or done.stdout or "", action, f["fs"]))
-    ok = bool((json.loads(done.stdout).get("data") or [False])[0])
+    try:
+        ok = bool((json.loads(done.stdout).get("data") or [False])[0])
+    except ValueError:
+        raise Refused("The system gave no answer about the result. Check the partition to see its state.") from None
     return {"action": action, "device": f["device"], "fs": f["fs"], "ok": ok, "message": WORDS[(action, ok)]}

@@ -51,6 +51,33 @@ class Rules(unittest.TestCase):
         self.assertEqual((da.can_unmount(homes, HOME), da.can_remove(homes, HOME)), ([], False))
         self.assertFalse(da.can_remove(d, HOME))                # not USB, and the system runs from it
 
+    def test_more_system_places_and_other_uses(self):
+        for place in ("/efi", "/tmp", "/opt/tools", "/nix", "/nix/store", "/boot/efi", "/var/lib/x"):
+            self.assertTrue(da.in_system_use(Volume("sdz1", 1, "ext4", [place]), HOME), place)
+        self.assertFalse(da.in_system_use(Volume("sdz1", 1, "ext4", ["/mnt/data"]), HOME))
+        swap = drive(Volume("sdz1", 1, "exfat", []))
+        swap.other_use = "swap space"
+        run, calls = service()
+        self.assertFalse(da.can_remove(swap, HOME))
+        self.assertEqual((da.remove(swap, run, HOME), calls),
+                         ((False, "It is in use as swap space. Switch that off first."), []))
+        from diskygui import drives as dr
+        v = lambda x: {"type": "v", "data": x}  # noqa: E731
+        P = "org.freedesktop.UDisks2."
+        answer = {"data": [{
+            "/org/freedesktop/UDisks2/drives/A": {P + "Drive": {"Model": v("A"), "Size": v(10), "ConnectionBus": v("usb")}},
+            "/org/freedesktop/UDisks2/drives/B": {P + "Drive": {"Model": v("B"), "Size": v(9), "ConnectionBus": v("usb")}},
+            "/org/freedesktop/UDisks2/block_devices/sdy": {P + "Block": {"Drive": v("/org/freedesktop/UDisks2/drives/A")}},
+            "/org/freedesktop/UDisks2/block_devices/sdy2": {
+                P + "Block": {"Drive": v("/org/freedesktop/UDisks2/drives/A")}, P + "Partition": {},
+                P + "Swapspace": {"Active": v(True)}},
+            "/org/freedesktop/UDisks2/block_devices/sdz1": {
+                P + "Block": {"Drive": v("/org/freedesktop/UDisks2/drives/B")}, P + "Partition": {},
+                P + "Encrypted": {"CleartextDevice": v("/org/freedesktop/UDisks2/block_devices/dm_2d0")}},
+        }]}
+        got = {d.model: (d.device, d.other_use) for d in dr.parse(answer)}
+        self.assertEqual(got, {"A": ("sdy", "swap space"), "B": ("", "an unlocked encrypted volume")})
+
     def test_safely_remove_unmounts_first_and_stops_if_that_fails(self):
         d = drive(Volume("sdz1", 1, "exfat", ["/run/media/someone/DATA"]))
         run, calls = service()
@@ -110,6 +137,14 @@ class Panel(unittest.TestCase):
         self.assertEqual(seen, ["mount"])
         self.assertEqual((panel.row(), panel.action_note.text()), (0, "Mounted at /run/media/someone/DATA."))
         self.assertEqual(buttons(), (False, True, True))        # the list was read again: now it can be unmounted
+        gone = []
+        panel.read_drives = lambda: []                          # the drive was unplugged after the list was read
+        Fake.unmount = staticmethod(lambda d: gone.append(d) or (True, "x"))
+        panel.unmount_button.click()
+        self.assertEqual((gone, panel.action_note.text()), ([], "That drive is no longer there."))
+        panel.read_drives = found
+        panel.load_drives()
+        panel.drive_list.setCurrentRow(0)
         panel.set_busy(True)
         self.assertEqual(buttons(), (False, False, False))      # never during a job
         panel.set_busy(False)

@@ -270,6 +270,11 @@ def _selftest_options(s):
 
 
 def _fscare(args, emit, stop):
+    if args.cmd == "fsrepair" and not args.yes:
+        emit({"event": "error", "code": "refused",
+              "message": "Repair changes the drive and can remove damaged files. Copy off what matters first, "
+                         "run fscheck to see whether it is needed, then add --yes."})
+        return 3
     try:
         r = fscare.act("check" if args.cmd == "fscheck" else "repair", args.folder)
     except fscare.Refused as e:
@@ -278,6 +283,10 @@ def _fscare(args, emit, stop):
     emit({"event": "fs_result", **r})
     emit({"event": "done"})
     return 0 if r["ok"] else 1
+
+
+def _repair_options(s):
+    s.add_argument("--yes", action="store_true", help="really repair: I have a copy of what matters")
 
 
 def _is_block_device(path):
@@ -355,7 +364,7 @@ COMMANDS = {c.name: c for c in (
     Command("fscheck", "read-only: is this partition's file system sound? (the system's own tool)", _fscare,
             target="any", target_help="the partition, e.g. sdX1; it must not be mounted"),
     Command("fsrepair", "repair this partition's file system with the system's own tool; it CHANGES the drive",
-            _fscare, target="any", target_help="the partition, e.g. sdX1; it must not be mounted"),
+            _fscare, _repair_options, target="any", target_help="the partition, e.g. sdX1; it must not be mounted"),
     Command("fragscan", "read-only fragmentation report of an exFAT partition or image (needs the right to read it)",
             _fragscan, target="any", target_help="the partition, e.g. /dev/sdX1, or an image file"),
 )}

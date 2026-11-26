@@ -210,7 +210,15 @@ _UNIT = {"poweronhours": _HOURS, "temperaturecelsius": _KELVIN, "airflowtemperat
 def smartctl_rows(data):
     """Rows from the engine's `smart_data` (parts of `smartctl -j`): the same rules and words as ata_rows and
     nvme_rows, so a drive reads the same whichever way its record was fetched."""
+    verdict = []
+    if data.get("smart_status", {}).get("passed") is False:
+        verdict.append(Row("The drive's own verdict", "FAILED", "FAILING",
+                           "The drive itself says it is failing. Copy your files off it now."))
     nv = data.get("nvme_smart_health_information_log")
+    if nv and nv.get("critical_warning"):
+        verdict.append(Row("Critical warning", str(nv["critical_warning"]), "Warning from the drive",
+                           "The drive raises a critical warning: spare space, temperature, reliability or "
+                           "read-only mode."))
     if nv:
         a = {"avail_spare": nv.get("available_spare"), "spare_thresh": nv.get("available_spare_threshold"),
              "percent_used": nv.get("percentage_used"), "media_errors": nv.get("media_errors"),
@@ -223,12 +231,12 @@ def smartctl_rows(data):
             a[key] = None if units is None else units * 512_000       # NVMe counts in units of 512 000 bytes
         if nv.get("temperature") is not None:
             a["temp_sensors"] = [nv["temperature"] + 273]
-        return nvme_rows({k: v for k, v in a.items() if v is not None})
+        return verdict + nvme_rows({k: v for k, v in a.items() if v is not None})
     tuples, names = [], {}
     for at in data.get("ata_smart_attributes", {}).get("table", []):
         ident, name = int(at.get("id", 0)), str(at.get("name", ""))
         raw = at.get("raw", {})
-        lead = re.match(r"\s*(\d+)", str(raw.get("string", "")))
+        lead = re.match(r"\s*(-?\d+)", str(raw.get("string", "")))          # a temperature can be below zero
         n = int(lead.group(1)) if lead else int(raw.get("value") or 0)
         unit = _UNIT.get(_key(name), 1)
         pretty = n * 3_600_000 if unit == _HOURS else round((n + 273.15) * 1000) if unit == _KELVIN else n
@@ -237,7 +245,7 @@ def smartctl_rows(data):
             names[ident] = name
         tuples.append((ident, name if known else f"attribute-{ident}", 1 if at.get("flags", {}).get("prefailure")
                        else 0, at.get("value", -1), at.get("worst", -1), at.get("thresh", -1), pretty, unit, {}))
-    return ata_rows(tuples, names)
+    return verdict + ata_rows(tuples, names)
 
 
 def _unwrap(v):

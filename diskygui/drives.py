@@ -82,6 +82,7 @@ class Drive:
     smart: str = ""             # "ata", "nvme", or "" when the service cannot read SMART from it
     firmware: str = ""          # the drive's firmware version, as the service reports it
     device: str = ""            # the whole drive's name, like sdb (for smartctl through a USB case)
+    other_use: str = ""         # "swap space" or "an unlocked encrypted volume" when a part of it is in such use
 
     @property
     def spinning(self):
@@ -171,8 +172,14 @@ def parse(answer):
                              firmware=(d.get("Revision") or "").strip())
     for path, ifaces in objs.items():
         b = _props(ifaces, "Block")
-        if "/block_devices/" in path and b.get("Drive") in drives and (_P + "Partition") not in ifaces:
+        if "/block_devices/" not in path or b.get("Drive") not in drives:
+            continue
+        if (_P + "Partition") not in ifaces:
             drives[b["Drive"]].device = path.rsplit("/", 1)[-1]
+        if _props(ifaces, "Swapspace").get("Active"):
+            drives[b["Drive"]].other_use = "swap space"
+        elif _props(ifaces, "Encrypted").get("CleartextDevice", "/") not in ("/", "", None):
+            drives[b["Drive"]].other_use = "an unlocked encrypted volume"
     for path, ifaces in objs.items():
         b, fs = _props(ifaces, "Block"), ifaces.get(_P + "Filesystem")
         if "/block_devices/" not in path or fs is None or b.get("Drive") not in drives:
