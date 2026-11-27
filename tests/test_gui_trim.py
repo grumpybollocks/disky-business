@@ -89,9 +89,38 @@ class TrimTabTests(unittest.TestCase):
         self.addCleanup(win.close)
         tab = next(p for p in win.pages if p.title == "Care")
         tab.panel.drive_list.setCurrentRow(0)
-        self.assertEqual(tab.answer.text(), "Nothing to trim on this drive here.")
-        self.assertTrue(tab.detail.text())
+        self.assertEqual(tab.answer.text(), "Mount this drive first.")
+        self.assertIn("Press Mount", tab.detail.text())
         self.assertFalse(tab.go.isEnabled())
+
+    def test_a_picked_drive_is_trimmed_without_any_folder(self):
+        from diskygui import drives as dr
+        ssd = dr.Drive("EXAMPLE SSD", 1 << 40, "SSD", False, dr.Health(),
+                       [dr.Volume("sdz1", 1 << 30, "ext4", ["/data"]), dr.Volume("sdz2", 1 << 30, "ntfs", ["/win"]),
+                        dr.Volume("sdz3", 1 << 30, "btrfs", ["/more", "/more/sub"]), dr.Volume("sdz4", 1, "ext4", [])],
+                       path="/p/ssd")
+        self.win = MainWindow(theme=THEMES["w98"], drives=lambda: [ssd],
+                              runners={"Care": EngineRunner([sys.executable, FAKE, "good"])})
+        self.addCleanup(self.win.close)
+        tab = next(p for p in self.win.pages if p.title == "Care")
+        asked_about, started = [], []
+        tab.info_of = lambda place: asked_about.append(place) or dict(YES, mount=place)
+        tab.wrap = lambda: ["env", "PRETEND_PROMPT=1"]
+        tab.panel.drive_list.setCurrentRow(0)
+        tab.panel.settle()
+        self.assertEqual(tab.targets, ["/data", "/more"])               # every mounted file system, never NTFS
+        self.assertNotIn("/win", asked_about)
+        self.assertEqual((tab.answer.text(), tab.go.isEnabled(), tab.go.text()),
+                         ("This drive accepts TRIM.", True, "Trim this drive"))
+        questions = []
+        tab.confirm = lambda text: questions.append(text) or True
+        real_start = tab.runner.start
+        tab.runner.start = lambda mode, target, *a, **k: started.append((mode, target)) or real_start(mode, target, *a, **k)
+        self.run_it(tab)
+        self.assertEqual(started, [("trim", "/data"), ("trim", "/more")])   # one after the other
+        self.assertIn("/data, /more", questions[0])
+        self.assertEqual(len(questions), 1)                             # asked once for the whole drive
+        self.assertIn("Done:", tab.status.text())
 
 if __name__ == "__main__":
     unittest.main()
