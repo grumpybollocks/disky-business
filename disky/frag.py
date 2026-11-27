@@ -16,6 +16,8 @@ from . import mounts, proc
 FS_IOC_FIEMAP = 0xC020660B
 _SYNC, _LAST = 1, 1
 ENCODED, SHARED = 0x8, 0x2000   # FIEMAP_EXTENT_ENCODED (compressed), FIEMAP_EXTENT_SHARED (snapshot, reflink copy)
+# FIEMAP_EXTENT_UNKNOWN, _DELALLOC (not on the disk yet), _DATA_INLINE (inside metadata): no place on the disk
+NO_PLACE = 0x2 | 0x4 | 0x200
 _HEAD, _EXTENT, _BATCH = 32, 56, 512
 
 HANDS_OFF = {"ntfs", "ntfs3", "fuseblk"}       # never walked (fuseblk = ntfs-3g)
@@ -151,20 +153,74 @@ def defrag_file(path, run=proc.run, timeout=3600, stop=None):
         raise RuntimeError(f"The content of {path} changed during defragmenting. Stop using {tool[0]} on this drive.")
     return {"fs": kind, "tool": tool[0], "exit": done.returncode, "before": before, "after": after,
             "ended": getattr(done, "ended", ""),
-            "message": (done.stderr or done.stdout).strip()[-300:]}
+            "message": _tool_words(done.stderr or done.stdout or "")}
 
 
-def scan_folder(folder, worst=50, stop=None):
-    """Read-only: how fragmented the files under `folder` are. Stays on the folder's own file system."""
+def _tool_words(text):
+    """The tool's own words on one line: its error lines when it gives some (btrfs adds 'total 1 failures')."""
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    errors = [line for line in lines if "error" in line.lower() or "fail" in line.lower() and "total" not in line]
+    return "; ".join(errors or lines)[-300:]
+
+
+LAYOUT_BLOCKS = 100_000         # at most this many blocks in the layout map
+LAYOUT_STATES = ("free", "whole", "fragmented")     # by rank: a block shows the highest of what lies in it
+
+
+def layout(spans, kind, fs_bytes, max_blocks=LAYOUT_BLOCKS):
+    """Where the files lie, as a map: (base, block_bytes, numpy array of LAYOUT_STATES indexes).
+
+    spans = [(physical, length, rank)]. On ext4 and XFS the places are offsets on the file system, which starts
+    at 0 and is `fs_bytes` long. On btrfs they are places in btrfs's own address space, which does not start at
+    0 and is not the order on the disk: the map then spans from the first to the last place found."""
+    import numpy as np
+    if kind == "btrfs" and spans:
+        base = min(p for p, _, _ in spans)
+        end = max(p + n for p, n, _ in spans)
+    else:
+        base = 0
+        end = max([fs_bytes] + [p + n for p, n, _ in spans])
+    span = max(end - base, 1)
+    block = 4096
+    while span // block > max_blocks:
+        block *= 2
+    state = np.zeros(-(-span // block), np.uint8)
+    for p, n, rank in spans:
+        a, b = (p - base) // block, (p - base + max(n, 1) - 1) // block + 1
+        np.maximum(state[a:b], rank, out=state[a:b])
+    return base, block, state
+
+
+def layout_ranges(state):
+    """Run-length form: (first block, count, state name), free runs left out."""
+    import numpy as np
+    if len(state) == 0:
+        return
+    cuts = np.flatnonzero(np.diff(state)) + 1
+    starts = np.concatenate(([0], cuts))
+    ends = np.concatenate((cuts, [len(state)]))
+    for a, b in zip(starts.tolist(), ends.tolist()):
+        if state[a]:
+            yield a, b - a, LAYOUT_STATES[int(state[a])]
+
+
+def scan_folder(folder, worst=50, stop=None, with_layout=False):
+    """Read-only: how fragmented the files under `folder` are. Stays on the folder's own file system.
+    With `with_layout`, also where their pieces lie ("layout": see layout())."""
     import stat
-    if fs_type(folder) in HANDS_OFF:
+    kind = fs_type(folder)
+    if kind in HANDS_OFF:
         raise NotSupported("NTFS drives are not scanned: Linux may change a damaged NTFS drive just by reading it.")
     device = os.stat(folder).st_dev
     other_mounts = mounts.below(folder)     # never looked at, not even their top folder
     out = {"files": 0, "fragmented_files": 0, "pieces": 0, "file_bytes": 0, "fragmented_bytes": 0, "skipped": 0,
-           "shared_files": 0, "shared_bytes": 0}     # fragmented files shared with a snapshot or a copy
-    top = []
-    for root, dirs, names in os.walk(folder):
+           "shared_files": 0, "shared_bytes": 0,     # fragmented files shared with a snapshot or a copy
+           "skipped_files": []}                       # the first few that could not be read, and why
+    top, spans, seen = [], [], set()
+
+    def unreadable_folder(e):
+        _skip(out, e.filename or "?", f"folder not opened: {e.strerror or e}")
+    for root, dirs, names in os.walk(folder, onerror=unreadable_folder):
         if stop is not None and stop.is_set():
             break
         dirs[:] = [d for d in dirs if os.path.join(root, d) not in other_mounts
@@ -173,33 +229,53 @@ def scan_folder(folder, worst=50, stop=None):
             path = os.path.join(root, name)
             try:
                 st = os.lstat(path)
-                if not stat.S_ISREG(st.st_mode) or st.st_size == 0:
+                # Sizes count what lies on the disk: a sparse file (a disk image) can be far bigger than the
+                # space it uses, and a file with several names (hard links) is counted once. Found 2026-11-27: a
+                # 500 GB drive's home folder showed 1 TiB of files because of two sparse images.
+                used = min(st.st_size, st.st_blocks * 512)
+                if not stat.S_ISREG(st.st_mode) or used == 0:
                     continue
+                if st.st_nlink > 1:
+                    if st.st_ino in seen:
+                        continue
+                    seen.add(st.st_ino)
                 ext = extents(path)
                 n = pieces(ext)
-            except NotSupported:
+            except NotSupported as e:
                 if out["files"] == 0:
                     raise
-                out["skipped"] += 1
+                _skip(out, path, str(e))
                 continue
-            except OSError:
-                out["skipped"] += 1
+            except OSError as e:
+                _skip(out, path, e.strerror or str(e))
                 continue
             out["files"] += 1
             out["pieces"] += n
-            out["file_bytes"] += st.st_size
+            out["file_bytes"] += used
+            if with_layout:
+                spans.extend((p, length, 2 if n > 1 else 1) for _, p, length, *flags in ext
+                             if not (flags and flags[0] & NO_PLACE))
             if n > 1:
                 out["fragmented_files"] += 1
-                out["fragmented_bytes"] += st.st_size
+                out["fragmented_bytes"] += used
                 common = shared(ext)
                 if common:
                     out["shared_files"] += 1
-                    out["shared_bytes"] += st.st_size
-                top.append((n, st.st_size, path, common))
+                    out["shared_bytes"] += used
+                top.append((n, used, path, common))
                 if len(top) > 4 * worst:
                     top = sorted(top, reverse=True)[:worst]
     out["worst"] = [{"pieces": n, "bytes": b, "path": p, "shared": c} for n, b, p, c in sorted(top, reverse=True)[:worst]]
+    if with_layout:
+        vfs = os.statvfs(folder)
+        out["layout"] = layout(spans, kind, vfs.f_blocks * vfs.f_frsize) + (kind,)
     return out
+
+
+def _skip(out, path, why):
+    out["skipped"] += 1
+    if len(out["skipped_files"]) < 5:
+        out["skipped_files"].append({"path": path, "why": why})
 
 
 def defrag_all(folder, emit, stop=None, scan=None, one=None):
@@ -226,6 +302,11 @@ def defrag_all(folder, emit, stop=None, scan=None, one=None):
             out["shared" if isinstance(e, Shared) else "skipped"] += 1
             emit({"event": "defrag_progress", "index": i + 1, "total": len(found), "path": item["path"],
                   "before": item["pieces"], "after": item["pieces"], "skipped": True})
+            continue
+        if r.get("exit", 0) != 0 and not r.get("ended"):  # the tool refused or failed: not done (content unchanged)
+            out["skipped"] += 1
+            emit({"event": "defrag_progress", "index": i + 1, "total": len(found), "path": item["path"],
+                  "before": r["before"], "after": r["after"], "skipped": True})
             continue
         out["done"] += 1
         out["pieces_before"] += r["before"]

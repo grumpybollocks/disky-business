@@ -80,8 +80,15 @@ class Printer:
             got = "" if ev["trimmed_bytes"] is None else f"{human(ev['trimmed_bytes'])} "
             self._say(f"Trimmed {got}on {ev['mount']}.")
         elif kind == "defrag_result":
-            self._say(f"{ev['before']} pieces before, {ev['after']} after. Content checked: unchanged. "
-                      f"(tool: {ev['tool']}, exit {ev['exit']})")
+            if ev["exit"] != 0:
+                self._say(f"The system's tool ({ev['tool']}) did not defragment it (exit {ev['exit']})"
+                          + (f": {ev['message'].rstrip('.')}." if ev.get("message") else ".")
+                          + f" It is in {ev['after']} piece{'s' if ev['after'] != 1 else ''}; its content is unchanged.")
+            else:
+                self._say(f"{ev['before']} piece{'s' if ev['before'] != 1 else ''} before, {ev['after']} after. "
+                          f"Content checked: unchanged. (tool: {ev['tool']})")
+        elif kind == "done" and self.mode == "clean" and not ev.get("listed_files") and not ev.get("kept_files"):
+            self._say("No test files here. Nothing to remove.")
         elif kind in ("frag_files", "frag_summary") and not ev["files"] and not ev.get("skipped"):
             self._say(NO_FILES)
         elif kind == "frag_files":
@@ -93,7 +100,11 @@ class Printer:
                           "snapshot or a copy; defragall leaves them alone, because defragmenting would store them "
                           "a second time.")
             if ev.get("skipped"):
-                self._say(f"{ev['skipped']} files could not be read.")
+                self._say(f"{ev['skipped']} could not be read:")
+                for s in ev.get("skipped_files") or []:
+                    self._say(f"  {s.get('path')}  ({s.get('why')})")
+                if ev["skipped"] > len(ev.get("skipped_files") or []):
+                    self._say(f"  and {ev['skipped'] - len(ev.get('skipped_files') or [])} more")
             for w in ev.get("worst", [])[:20]:
                 self._say(f"  {w['pieces']} pieces  {human(w['bytes'])}  {w['path']}"
                           + ("  (shared)" if w.get("shared") else ""))
@@ -207,7 +218,7 @@ def _defrag(args, emit, stop):
         emit({"event": "error", "code": "os_error", "message": f"{e.strerror}: {e.filename or args.folder}"})
         return 3
     emit({"event": "defrag_result", "path": args.folder, "fs": r["fs"], "tool": r["tool"], "exit": r["exit"],
-          "before": r["before"], "after": r["after"], "changed_content": False})
+          "before": r["before"], "after": r["after"], "changed_content": False, "message": r["message"]})
     if r["ended"]:
         emit({"event": "warning", "code": "stopped" if r["ended"] == "stopped" else "timeout",
               "message": ("Stopped. " if r["ended"] == "stopped" else "The tool took too long and was ended. ")
@@ -310,10 +321,18 @@ def _fill(args, emit, stop):
 
 def _fragfiles(args, emit, stop):
     try:
-        emit({"event": "frag_files", **frag.scan_folder(args.folder, stop=stop)})
+        r = frag.scan_folder(args.folder, stop=stop, with_layout=True)
     except frag.NotSupported as e:
         emit({"event": "error", "code": "not_supported", "message": str(e)})
         return 3
+    base, block, state, kind = r.pop("layout")
+    top = mounts.holding(args.folder)[0]
+    emit({"event": "frag_files", **r})
+    emit({"event": "frag_layout", "base_bytes": int(base), "block_bytes": int(block), "blocks": len(state),
+          "address": "btrfs" if kind == "btrfs" else "disk",
+          "whole_drive": os.path.realpath(args.folder) == top})
+    for first, count, name in frag.layout_ranges(state):
+        emit({"event": "frag_blocks", "first": first, "count": count, "state": name})
     emit({"event": "done", "stopped": stop.is_set()})
     return 130 if stop.is_set() else 0
 
@@ -542,6 +561,8 @@ def _run(command, args, emit, stop):
     except engine.ExistingFiles as e:
         emit({"event": "error", "code": "existing_files", "message": command.existing.format(e=e)})
         return 3
+    except BrokenPipeError:
+        raise                           # the reader is gone (e.g. `| head`): nobody to tell; __main__ ends quietly
     except OSError as e:
         emit({"event": "error", "code": "os_error", "message": f"{e.strerror}: {e.filename or args.folder}"})
         return 3

@@ -92,7 +92,12 @@ def frag(scenario, mode, target):
         say(event="defrag_result", path=target, fs="btrfs", tool="btrfs", exit=0, before=64, after=1, changed_content=False)
     elif mode == "fragfiles":
         say(event="frag_files", files=10, fragmented_files=2, pieces=75, file_bytes=20 * MIB, fragmented_bytes=8 * MIB + 4096,
-            skipped=1, worst=worst)
+            skipped=1, skipped_files=[{"path": "/drive/vm.qcow2", "why": "Permission denied"}], worst=worst)
+        if scenario != "old_engine":            # an engine from before 2026-11-27 sent no layout
+            say(event="frag_layout", base_bytes=0, block_bytes=MIB, blocks=1000,
+                address="btrfs" if scenario == "btrfs_addresses" else "disk", whole_drive=scenario != "folder_only")
+            for first, count, state in ((10, 300, "whole"), (310, 2, "fragmented"), (600, 5, "whole")):
+                say(event="frag_blocks", first=first, count=count, state=state)
     else:
         say(event="frag_summary", cluster_bytes=131072, clusters=1000, used_clusters=400, files=10, folders=2,
             fragmented_files=2, pieces=75, file_bytes=20 * MIB, fragmented_bytes=8 * MIB + 4096, worst=worst)

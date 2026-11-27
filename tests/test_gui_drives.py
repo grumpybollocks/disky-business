@@ -402,5 +402,44 @@ class InTheWindow(unittest.TestCase):
         self.assertTrue(tab.go.isEnabled())
 
 
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class BackgroundJobs(unittest.TestCase):
+    """Found 2026-11-27: garbage collected on a job's thread made PySide free a label twice (Segmentation fault)."""
+
+    def test_no_garbage_collection_while_a_job_runs_and_it_comes_back_after(self):
+        import gc
+        import threading
+        import time
+        from PySide6.QtWidgets import QApplication
+        from diskygui import drivepanel
+        app = QApplication.instance() or QApplication([])
+        self.assertTrue(gc.isenabled())
+        go, seen, got = threading.Event(), [], []
+        job = drivepanel._Job(lambda: (go.wait(5), seen.append(gc.isenabled()))[1], got.append)
+        self.assertFalse(gc.isenabled())                      # paused before the thread ran a single line
+        go.set()
+        end = time.monotonic() + 5
+        while not (job.box.done and gc.isenabled()):
+            self.assertLess(time.monotonic(), end, "collection never came back on")
+            app.processEvents()
+            time.sleep(0.01)
+        self.assertEqual(seen, [False])                       # the job's thread never ran with it on
+
+    def test_collection_left_off_by_someone_else_stays_off(self):
+        import gc
+        from PySide6.QtWidgets import QApplication
+        from diskygui import drivepanel
+        QApplication.instance() or QApplication([])
+        gc.disable()
+        try:
+            job = drivepanel._Job(lambda: None, lambda *a: None)
+            while not job.box.done:
+                pass
+            drivepanel._resume_collection()
+            self.assertFalse(gc.isenabled())
+        finally:
+            gc.enable()
+
+
 if __name__ == "__main__":
     unittest.main()

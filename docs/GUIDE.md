@@ -77,7 +77,11 @@ listed first, problems in red; **Show all items** lists the rest.
 
 ## Defrag
 
-**Scan** shows how fragmented the files are and lists the worst. On btrfs, ext4 and XFS, **Defragment all**
+**Scan** shows how fragmented the files are, lists the worst, and draws where they lie: files in one piece and
+files in pieces, the rest free. A square shows a file if any part of one lies in it. On btrfs the map is in
+btrfs's own address space, not the order on the disk (the caption says so). Scanning a folder draws only its
+files. On the drive your system runs from, the scan covers your home folder. Files and folders that could not
+be read are counted and the first is named. On btrfs, ext4 and XFS, **Defragment all**
 then works through every fragmented file with the system's own tool; after each file its content is checked to
 be unchanged. **Stop** ends it after the file in hand. exFAT is scanned only (this needs admin rights). Windows
 (NTFS) drives are not scanned or defragmented: Linux has no tool for that which can be trusted, and Windows

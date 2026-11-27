@@ -29,11 +29,11 @@ def smartctl(device, options, timeout, why, run=proc.run, is_root=None, is_block
     """Run `smartctl -j <options> /dev/<drive>` with every check a command with admin rights needs, and return
     its JSON answer (a dict). Raises PermissionError (`why` says what needs admin rights), ValueError."""
     path = device_path(device)
+    block = is_block or (lambda p: os.path.exists(p) and stat.S_ISBLK(os.stat(p).st_mode))
+    if not block(path):                     # first: a missing drive is not a question of rights
+        raise ValueError(f"There is no drive {path} (was it unplugged?).")
     if not (os.geteuid() == 0 if is_root is None else is_root):
         raise PermissionError(why)
-    block = is_block or (lambda p: os.path.exists(p) and stat.S_ISBLK(os.stat(p).st_mode))
-    if not block(path):
-        raise ValueError(f"{path} is not a drive (was it unplugged?).")
     if shutil.which("smartctl") is None and run is proc.run:
         raise ValueError("smartctl is not installed (package smartmontools).")
     done = run(["smartctl", "-j", *options, path], capture_output=True, text=True, timeout=timeout)

@@ -14,7 +14,10 @@ CODES = {"written": WRITTEN, "good": GOOD, "changed": CHANGED, "overwritten": OV
 
 
 class MapModel:
-    def __init__(self):
+    def __init__(self, layout=False):
+        # layout=True (the Defrag map): a square shows the highest state in it (in pieces, whole file, other
+        # data, free), so a file is never hidden by the free space around it in the same square.
+        self.layout = layout
         self.reset()
 
     def reset(self, block_bytes=1 << 20):
@@ -80,7 +83,7 @@ class MapModel:
             return np.zeros(0, np.uint8), b
         worst = np.maximum.reduceat(self.states, b[:-1])
         least = np.minimum.reduceat(self.states, b[:-1])
-        out = np.where(worst >= CHANGED, worst, least).astype(np.uint8)
+        out = (worst if self.layout else np.where(worst >= CHANGED, worst, least)).astype(np.uint8)
         if self.cursor is not None and 0 <= self.cursor < len(self.states):
             hi = int(np.searchsorted(b[:-1], self.cursor, side="right"))
             lo = min(int(np.searchsorted(b[:-1], self.cursor, side="left")), hi - 1)

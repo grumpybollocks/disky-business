@@ -4,11 +4,14 @@
 A new tab subclasses TabBase, sets `title` and `NOTE`, builds its right-hand side, and
 fills in the hooks at the bottom. Put the class in window.MainWindow.TABS and it appears.
 """
+import os
+
 from PySide6.QtCore import Signal
 from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QVBoxLayout,
                                QWidget)
 
 from .drivepanel import DrivePanel
+from .drives import TEST_FOLDER
 from .runner import EngineRunner
 
 
@@ -88,6 +91,7 @@ class TabBase(QWidget):
         self.progress_lines = []
         self.confirm = lambda text: QMessageBox.question(self, "Disky Business", text) == QMessageBox.Yes
         self.panel = DrivePanel(drives, self.NOTE, self.FOLDER_HEADING, uses_folder=self.USES_FOLDER)
+        self.panel.changed.connect(self._show_working_folder)
         self.panel.changed.connect(self.on_folder)
 
     # -- helpers for building the right-hand side ------------------------------------------------------------
@@ -132,9 +136,23 @@ class TabBase(QWidget):
         row.addLayout(right, 1)
 
     # -- shared behaviour ------------------------------------------------------------------------------------
+    OWN_TEST_FOLDER = False     # True for the Test tab only: it writes into the app's own folder in the home folder
+
+    def _show_working_folder(self, folder, _hint):
+        """The "Works in" box shows the folder this tab really works in (see `folder`)."""
+        if folder and self.folder != folder:
+            self.panel.folder_box.setText(self.folder)
+
     @property
     def folder(self):
-        return self.panel.folder
+        """The folder this tab works in. On the system drive the panel names the Test tab's own folder in the
+        home folder, which exists only once a test made it: the other tabs work in the home folder itself
+        (Defrag scans it, Speed puts its temporary file there and removes it). Found 2026-11-27: Defrag on the
+        system drive said "Not a folder"."""
+        f = self.panel.folder
+        if f and not self.OWN_TEST_FOLDER and os.path.basename(f.rstrip("/")) == TEST_FOLDER:
+            return os.path.dirname(f.rstrip("/"))
+        return f
 
     @property
     def drives(self):

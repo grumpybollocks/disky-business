@@ -19,6 +19,7 @@ EVENTS = {
     "frag_summary": {"cluster_bytes": INT, "clusters": INT, "used_clusters": OPT_INT, "files": INT, "folders": INT,
                      "fragmented_files": INT, "pieces": INT, "file_bytes": INT, "fragmented_bytes": INT},
     "frag_blocks": {"first": INT, "count": INT, "state": STR},
+    "frag_layout": {"base_bytes": INT, "block_bytes": INT, "blocks": INT, "address": STR, "whole_drive": BOOL},
     "frag_files": {"files": INT, "fragmented_files": INT, "pieces": INT, "file_bytes": INT,
                    "fragmented_bytes": INT, "skipped": INT},
     "defrag_result": {"path": STR, "fs": STR, "tool": STR, "exit": INT, "before": INT, "after": INT,

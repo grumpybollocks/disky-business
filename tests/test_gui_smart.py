@@ -244,6 +244,7 @@ class Tab(unittest.TestCase):
         t = THEMES[DEFAULT_THEME]
         tab = SmartTab(t, drives=lambda: [drive(), drive("")])
         tab.read_smart = lambda d: smart.read(d, run=answer(ATA), names_of=lambda *drive: NAMES)
+        tab.panel.read_smart = tab.read_smart                # the health box too: never the real system
         self.assertEqual((tab.answer.text(), tab.again.isEnabled()), ("Choose a drive.", False))   # nothing picked
         tab.panel.drive_list.setCurrentRow(0)
         self.assertEqual(tab.answer.text(), "The drive says it is failing. Copy your files off it now.")
@@ -273,6 +274,7 @@ class Tab(unittest.TestCase):
         QApplication.instance() or QApplication([])
         tab = SmartTab(THEMES[DEFAULT_THEME], drives=lambda: [drive("nvme")])
         tab.read_smart = lambda d: smart.read(d, run=answer(NVME))
+        tab.panel.read_smart = tab.read_smart
         tab.panel.drive_list.setCurrentRow(0)
         self.assertTrue(all(tab.table.isColumnHidden(c) for c in (3, 4, 5)))
         self.assertEqual([n.text() for t, v, n in tab.glance_boxes if not t.isHidden()],
@@ -291,6 +293,7 @@ class Tab(unittest.TestCase):
                        drives=lambda: [usb, drive()])
         self.addCleanup(tab.deleteLater)
         tab.read_smart = lambda d: smart.read(d, run=answer(ATA), names_of=lambda *x: NAMES)
+        tab.panel.read_smart = tab.read_smart
         tab.wrap = lambda: ["env", "PRETEND_PROMPT=1"]
         return tab
 
