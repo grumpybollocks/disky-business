@@ -28,6 +28,10 @@ def _settle(seconds=5.0):
     if app is not None:
         QCoreApplication.sendPostedEvents(None, QEvent.DeferredDelete)
         app.processEvents()
+    import sys
+    panel = sys.modules.get("diskygui.drivepanel")
+    if panel is not None:
+        panel._resume_collection()                  # the jobs are over: collection back on, as the window does
     gc.collect()
 
 
