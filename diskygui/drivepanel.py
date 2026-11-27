@@ -15,19 +15,41 @@ from . import drives as drives_mod
 from . import smart
 
 
+class _Box:
+    """What the worker thread fills in. It holds no widget: a widget freed off the window's thread crashes."""
+
+    def __init__(self):
+        self.result, self.done = None, False
+
+
+def _run(work, box):
+    try:
+        box.result = work()
+    except Exception as e:                              # reported to `then`, never lost in the thread
+        box.result = e
+    box.done = True
+
+
 class _Job:
     """One piece of slow work (asking the system about a drive) done off the window's thread."""
 
     def __init__(self, work, then):
-        self.then, self.result, self.done = then, None, False
+        self.then, self.box = then, _Box()
+        threading.Thread(target=_run, args=(work, self.box), daemon=True).start()
 
-        def run():
-            try:
-                self.result = work()
-            except Exception as e:                      # reported to `then`, never lost in the thread
-                self.result = e
-            self.done = True
-        threading.Thread(target=run, daemon=True).start()
+    @property
+    def done(self):
+        return self.box.done
+
+    @property
+    def result(self):
+        return self.box.result
+
+
+def fresh(read_drives, drive):
+    """The same drive read again from the system, or None when it is gone. Device names like sdb are
+    handed out again to other drives, so nothing is done on the strength of an old list."""
+    return next((x for x in read_drives() if x.path and x.path == drive.path), None)
 
 
 class DrivePanel(QWidget):
@@ -131,9 +153,7 @@ class DrivePanel(QWidget):
         self.remove_button.setEnabled(bool(d and self.actions.can_remove(d)))
 
     def fresh(self, drive):
-        """The same drive read again from the system, or None when it is gone. Device names like sdb are
-        handed out again to other drives, so nothing is done on the strength of an old list."""
-        return next((x for x in self.read_drives() if x.path and x.path == drive.path), None)
+        return fresh(self.read_drives, drive)
 
     def do_mount(self):
         self.act("mount")
@@ -153,10 +173,10 @@ class DrivePanel(QWidget):
         self.action_note.setText({"mount": "Mounting...", "unmount": "Unmounting...",
                                   "remove": "Switching off..."}[job])
         self.update_actions()
-        action = getattr(self.actions, job)
+        action, read_drives = getattr(self.actions, job), self.read_drives
 
-        def work():
-            now = self.fresh(d)                         # the drive as it is now, not as it was listed
+        def work():                                     # holds no widget: one freed off the window's thread crashes
+            now = fresh(read_drives, d)                 # the drive as it is now, not as it was listed
             return (False, "That drive is no longer there.") if now is None else action(now)
         self.later(work, self.acted, d)
 
@@ -221,7 +241,8 @@ class DrivePanel(QWidget):
         folder, why = d.target()
         self.health.setText("\n".join(self.health_lines(d)))
         if d.smart:                                     # wear and warnings follow when the drive has answered
-            self.later(lambda: self.read_smart(d), self.health_read, d)
+            read = self.read_smart                      # the job holds no widget (see `act`)
+            self.later(lambda: read(d), self.health_read, d)
         self.set_folder(folder or "", why or "Press Start.")
 
     def health_lines(self, d):

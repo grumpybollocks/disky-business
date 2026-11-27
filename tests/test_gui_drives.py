@@ -281,6 +281,32 @@ class InTheWindow(unittest.TestCase):
         self.assertFalse(tab.panel.folder_box.isHidden() or tab.panel.choose.isHidden())
         self.assertEqual(tab.panel.choose.text(), "Other folder...")
 
+    def test_slow_work_does_not_keep_the_window_alive(self):
+        # A Qt widget freed by a worker thread crashes the program (seen on CI): the thread must not hold it.
+        import gc, weakref
+        from unittest import mock
+        from diskygui import drivepanel
+        ssd = dr.Drive("EXAMPLE SSD", 1 << 30, "SSD", False, dr.Health("ok", "Health: OK", 30, 100), smart="ata",
+                       path="/p", volumes=[dr.Volume("sdz1", 1 << 30, "ext4", [], False)])
+        held = []
+        fake = lambda target, daemon, args=(): mock.Mock(start=lambda: held.append((target, args)))   # held "forever"
+        win = MainWindow(theme=THEMES["w98"], runner=EngineRunner([sys.executable, "-c", "pass"]), drives=lambda: [ssd])
+        panel = win.pages[0].panel
+        panel.actions = mock.Mock(mount=lambda d: (True, ""), can_mount=lambda d: True)
+        with mock.patch.object(drivepanel.threading, "Thread", fake):
+            win.pages[0].drive_list.setCurrentRow(0)            # SMART read
+            panel.act("mount")                                  # drive action
+        self.assertEqual(len(held), 2)
+        gone = weakref.ref(panel)
+        win.close()
+        win.deleteLater()
+        del win, panel
+        for _ in range(3):
+            QApplication.processEvents()
+            QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+            gc.collect()
+        self.assertIsNone(gone(), "a background job still holds the drive panel")
+
     def test_health_box_shows_wear_and_warnings(self):
         from diskygui.smart import Row
         ssd = dr.Drive("EXAMPLE SSD", 1 << 30, "SSD", False, dr.Health("ok", "Health: OK", 30, 100), smart="ata",
