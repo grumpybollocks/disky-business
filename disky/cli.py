@@ -60,7 +60,8 @@ class Printer:
         elif kind in ("warning", "error"):
             self._say(ev["message"])
         elif kind == "blocks" and ev["state"] not in ("written", "good"):
-            self._say(f"Block {ev['first']} (at {human(ev['first_bad_offset'])}): {ev['state']}")
+            at = ev.get("first_bad_offset")
+            self._say(f"Block {ev['first']}" + ("" if at is None else f" (at {human(at)})") + f": {ev['state']}")
         elif kind == "summary":
             self._say(self.verdict(ev))
         elif kind == "trim_result":
@@ -81,6 +82,23 @@ class Printer:
                       f"holding {human(ev['fragmented_bytes'])} of {human(ev['file_bytes'])}.")
             for w in ev.get("worst", []):
                 self._say(f"  {w['pieces']} pieces  {human(w['bytes'])}  {w['path']}")
+        elif kind == "fs_result":
+            self._say(f"{ev['action'].capitalize()} of {ev['device']} ({ev['fs']}): {ev['message']}")
+        elif kind == "selftest_progress":
+            self.err.write(f"\rSelf-test running: {ev['percent']} %   ")
+            self.err.flush()
+            self.line_open = True
+        elif kind == "selftest_result":
+            self._say(f"Self-test ({ev['kind']}): {ev['message']}")
+        elif kind == "defrag_progress":
+            self._say(f"File {ev['index']} of {ev['total']}: " + ("skipped" if ev["skipped"] else
+                      f"{ev['before']} pieces before, {ev['after']} after") + f"  {ev['path']}")
+        elif kind == "defragall_result":
+            self._say(f"{ev['done']} of {ev['files']} files done, {ev['improved']} in fewer pieces, {ev['skipped']} "
+                      f"skipped; {ev['pieces_before']} pieces before, {ev['pieces_after']} after."
+                      + (" Stopped." if ev["stopped"] else ""))
+        elif kind in ("smart_data", "smart_deep"):
+            self._say(self.smart_words(ev))
         elif kind == "speed_result":
             extra = "" if ev["iops"] is None else f"  ({ev['iops']} per second" + (
                 ")" if ev["direct"] else ", through the system's cache)")
@@ -94,6 +112,29 @@ class Printer:
             self.line_open = False
         self.out.write(text + "\n")
         self.out.flush()
+
+    @staticmethod
+    def smart_words(ev):
+        """A few plain lines; everything is in --json (the window shows it all in words)."""
+        d = ev["data"]
+        g = lambda *path: _dig(d, path)  # noqa: E731
+        health = g("smart_status", "passed")
+        lines = [f"{ev['device']}: {d.get('model_name', 'unknown model')}"
+                 + (f", firmware {d['firmware_version']}" if d.get("firmware_version") else ""),
+                 "Health: " + ("passed" if health else "FAILING" if health is False else "not reported")]
+        if d.get("maker"):
+            lines.append(f"Maker: {d['maker']}")
+        if g("power_on_time", "hours") is not None:
+            lines.append(f"Hours on: {g('power_on_time', 'hours')}")
+        if g("temperature", "current") is not None:
+            lines.append(f"Temperature: {g('temperature', 'current')} °C")
+        errors = g("ata_smart_error_log", "extended", "count") or g("ata_smart_error_log", "summary", "count")
+        if errors is not None:
+            lines.append(f"Errors in the drive's log: {errors}")
+        if d.get("serial_number"):
+            lines.append(f"Serial number: {d['serial_number']}")
+        lines.append("Everything: add --json (the window shows it in plain words).")
+        return "\n".join(lines)
 
     @staticmethod
     def verdict(ev):
@@ -173,6 +214,12 @@ def _fragscan(args, emit, stop):
         emit({"event": "frag_blocks", "first": first, "count": count, "state": name})
     emit({"event": "done"})
     return 0
+
+
+def _dig(d, path):
+    for p in path:
+        d = d.get(p) if isinstance(d, dict) else None
+    return d
 
 
 _SPEED_WORDS = {"seq_write": "Writing in one go", "seq_read": "Reading in one go",
