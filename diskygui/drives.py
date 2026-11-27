@@ -99,6 +99,8 @@ class Drive:
         return f"{size_text(self.size)}  {self.kind_text()}\n{self.model}"
 
     def kind_text(self):
+        if self.kind == "stick":
+            return "USB stick" if self.usb else "Memory card"
         return ("USB " if self.usb else "") + self.kind
 
     def target(self, home=None, writable=None, mounted_ro=None):
@@ -166,6 +168,11 @@ def _health(ifaces):
     return Health()
 
 
+# Media names the drive service gives flash sticks and memory cards (udisks2 "Media" / "MediaCompatibility").
+_FLASH_MEDIA = {"thumb", "flash", "flash_cf", "flash_ms", "flash_sm", "flash_sd", "flash_sdhc", "flash_sdxc",
+                "flash_sdio", "flash_sd_combo", "flash_mmc"}
+
+
 def parse(answer):
     """busctl's JSON answer -> list of Drive, biggest first within: removable, then the rest."""
     objs = answer["data"][0] if isinstance(answer, dict) and answer.get("data") else {}
@@ -176,7 +183,9 @@ def parse(answer):
             continue                                # Size may be 0 for NVMe: taken from its whole-drive block below
         nvme = (_P + "NVMe.Controller") in ifaces
         rpm = d.get("RotationRate") or 0            # -1 = spinning, speed unknown; 0 = not spinning
-        kind = "NVMe" if nvme else "SSD" if rpm == 0 else "HDD"
+        media = {d.get("Media") or ""} | set(d.get("MediaCompatibility") or [])
+        stick = bool(media & _FLASH_MEDIA)          # the service names the media: no rotation guess needed
+        kind = "NVMe" if nvme else "stick" if stick else "SSD" if rpm == 0 else "HDD"
         smart = "nvme" if nvme else "ata" if (_P + "Drive.Ata") in ifaces else ""
         drives[path] = Drive((d.get("Model") or "Drive").strip(), int(d.get("Size") or 0), kind,
                              d.get("ConnectionBus") == "usb", _health(ifaces), path=path, smart=smart,
