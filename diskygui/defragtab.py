@@ -17,7 +17,7 @@ from .drives import fs_name
 from .mapmodel import BAD, GOOD, UNTOUCHED, WRITTEN, MapModel
 from .mapwidget import BlockMap
 from .adminsession import admin_wrap  # noqa: F401  (also imported from here by older code and tests)
-from .tabbase import ProgressLine, TabBase
+from .tabbase import TabBase
 
 LEGEND = (("free", "Free"), ("other", "Other data"), ("whole", "File in one piece"), ("fragmented", "File in pieces"))
 AS_STATE = {"free": "untouched", "other": "written", "whole": "good", "fragmented": "bad"}
@@ -76,7 +76,7 @@ class DefragTab(TabBase):
         buttons = QVBoxLayout()
         buttons.addWidget(self.scan_button)
         buttons.addWidget(self.defrag_button)
-        self.progress = ProgressLine()                  # shown while "Defragment all" works
+        self.progress = self.progress_line()                  # shown while "Defragment all" works
         self.progress.hide()
         words = QVBoxLayout()
         words.addWidget(self.status)
@@ -178,6 +178,7 @@ class DefragTab(TabBase):
     def defrag_or_stop(self):
         if self.mode == "defrag":
             self.status.setText("Stopping after the file in hand...")
+            self.progress.show_stopping("Stopping after the file in hand...")
             self.runner.stop()
             return
         if self.mode is not None or self.kind() not in frag.TOOLS or self.fragmented <= 0:

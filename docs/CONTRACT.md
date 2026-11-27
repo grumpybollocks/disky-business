@@ -90,7 +90,8 @@ and history (`ata_smart_error_log`, `ata_smart_self_test_log`, `nvme_error_infor
 `nvme_self_test_log`, `ata_sct_temperature_history`, `ata_device_statistics`, `sata_phy_event_counters`),
 plus two of Disky's own: `maker` (the registered owner of the drive's maker number, or null) and
 `production_date` (always null: SATA and NVMe drives do not report one). `wwn` never holds its unique part.
-`serial_number` is present only with `--serial`. Errors: `needs_admin`, `no_smart`, `bad_options`
+`serial_number` is present only with `--serial` (the window asks for it and keeps it hidden until the user
+ticks "Show serial number"; reports leave it out unless ticked). Errors: `needs_admin`, `no_smart`, `bad_options`
 (`--serial` without `--deep`).
 
 ## SMART self-test (added 2026-11-26, still contract version 1)

@@ -10,15 +10,11 @@ and two drives in USB cases (2026-11-27). SAS/SCSI drives were not available, so
 that carry a production date) are not read: the date is reported as not known.
 
 The serial number and the unique part of the world-wide name identify one drive: the serial is passed on only
-when asked for, the unique part never.
+when asked for (`--serial`; the window asks, and keeps it hidden until the user ticks "Show serial number"),
+the unique part never.
 """
-import json
-import os
-import shutil
-import stat
-
 from . import proc
-from .smartread import device_path
+from .smartread import errors_of, smartctl
 
 KEEP = (
     # identity
@@ -33,43 +29,32 @@ KEEP = (
     "ata_smart_error_log", "ata_smart_self_test_log", "nvme_error_information_log", "nvme_self_test_log",
     "ata_sct_temperature_history", "ata_device_statistics", "sata_phy_event_counters",
 )
-OUI_FILE = "/usr/share/hwdata/oui.txt"
+OUI_FILES = ("/usr/share/hwdata/oui.txt", "/usr/share/ieee-data/oui.txt")    # Arch, Fedora / Debian, Ubuntu
 
 
-def maker(oui, path=OUI_FILE):
+def maker(oui, path=None):
     """The registered owner of a 24-bit maker number (IEEE OUI), or None when it is not known."""
     if not isinstance(oui, int) or not 0 <= oui < 1 << 24:
         return None
     key = "-".join(f"{oui:06X}"[i:i + 2] for i in (0, 2, 4)) + " "
-    try:
-        with open(path, encoding="utf-8", errors="replace") as f:
-            for line in f:
-                if line.startswith(key) and "(hex)" in line:
-                    return line.split("(hex)", 1)[1].strip() or None
-    except OSError:
-        return None
+    for one in ([path] if path else OUI_FILES):
+        try:
+            with open(one, encoding="utf-8", errors="replace") as f:
+                for line in f:
+                    if line.startswith(key) and "(hex)" in line:
+                        return line.split("(hex)", 1)[1].strip() or None
+            return None                                  # the list was there; the number is not in it
+        except OSError:
+            continue
     return None
 
 
-def read(device, serial=False, run=proc.run, is_root=None, is_block=None, oui_file=OUI_FILE):
+def read(device, serial=False, run=proc.run, is_root=None, is_block=None, oui_file=None):
     """The parts of `smartctl -x -j` the deep scan shows. Raises PermissionError, ValueError (nothing to show)."""
-    path = device_path(device)
-    if not (os.geteuid() == 0 if is_root is None else is_root):
-        raise PermissionError("The deep scan needs admin rights.")
-    block = is_block or (lambda p: os.path.exists(p) and stat.S_ISBLK(os.stat(p).st_mode))
-    if not block(path):
-        raise ValueError(f"{path} is not a drive (was it unplugged?).")
-    if shutil.which("smartctl") is None and run is proc.run:
-        raise ValueError("smartctl is not installed (package smartmontools).")
     # smartctl's exit code is a bit mask that also flags old errors in the logs; the JSON says what was read.
-    done = run(["smartctl", "-x", "-j", path], capture_output=True, text=True, timeout=300)
-    try:
-        js = json.loads(done.stdout)
-    except ValueError:
-        raise ValueError("smartctl gave no readable answer.") from None
-    if not isinstance(js, dict) or "model_name" not in js:
-        errors = [m.get("string", "") for m in js.get("smartctl", {}).get("messages", [])
-                  if m.get("severity") == "error"] if isinstance(js, dict) else []
+    js = smartctl(device, ["-x"], 300, "The deep scan needs admin rights.", run, is_root, is_block)
+    if "model_name" not in js:
+        errors = errors_of(js)
         raise ValueError("This drive gives no information for a deep scan."
                          + (f" (smartctl: {errors[0][:160]})" if errors else ""))
     out = {k: js[k] for k in KEEP if k in js}

@@ -98,7 +98,7 @@ BUTTON_ICONS = {
     "Check test files again": "tick", "Delete test files": "bin",
     "Scan": "search", "Defragment all": "play",
     "Check": "tick", "Repair": "plus", "Trim this drive": "play",
-    "Read with admin password": "search", "Short self-test": "play", "Long self-test": "play", "Stop self-test": "stop", "Read again": "refresh",
+    "Read with admin password": "search", "Deep scan": "search", "Short self-test": "play", "Long self-test": "play", "Stop self-test": "stop", "Read again": "refresh",
     "Refresh": "refresh", "Mount": "down", "Unmount": "up", "Safely remove": "eject", "Other folder...": "folder",
 }
 

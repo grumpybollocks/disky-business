@@ -164,6 +164,16 @@ def main():
         if scenario == "refuse":
             say(event="error", code="no_smart", message="This drive gives no SMART data through its USB case.")
             return 3
+        if "--deep" in sys.argv:
+            data = {"model_name": "EXAMPLE DISK", "maker": "Example Drives Ltd", "production_date": None,
+                    "firmware_version": "FW01", "power_on_time": {"hours": 1234},
+                    "ata_smart_error_log": {"extended": {"count": 1, "table": [
+                        {"lifetime_hours": 1000, "completion_registers": {"error": 64}}]}}}
+            if "--serial" in sys.argv:
+                data["serial_number"] = "EXAMPLE-SERIAL-1"
+            say(event="smart_deep", device=sys.argv[3], data=data)
+            say(event="done")
+            return 0
         say(event="smart_data", device=sys.argv[3], data={"smart_status": {"passed": True}, "ata_smart_attributes": {
             "table": [{"id": 9, "name": "Power_On_Hours", "value": 99, "worst": 99, "thresh": 0,
                        "flags": {"prefailure": False}, "raw": {"value": 1234, "string": "1234"}}]}})

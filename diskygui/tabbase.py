@@ -42,9 +42,15 @@ class ProgressLine(QWidget):
         col.addLayout(under)
         col.addStretch(1)
 
+    stopping = ""                       # while set, the title says so (Stop was pressed; the job ends soon)
+
+    def show_stopping(self, words="Stopping..."):
+        self.stopping = words
+        self.title.setText(words)
+
     def show_progress(self, title, percent=None, left="", right=""):
         """percent None: how far is not known yet (the bar runs to and fro)."""
-        self.title.setText(title)
+        self.title.setText(self.stopping or title)
         if percent is None:
             self.bar.setRange(0, 0)
             self.percent.setText("")
@@ -77,11 +83,20 @@ class TabBase(QWidget):
         self.continuing = False                         # set by a tab whose job goes on with another engine run
         self.error = None
         self.swatches = []                              # (label widget, colour key) of the legend
+        # The tab's progress bars, made with progress_line(). Kept in a list on purpose: walking Qt's children
+        # from Python (findChildren) made the tests crash at clean-up (2026-11-27).
+        self.progress_lines = []
         self.confirm = lambda text: QMessageBox.question(self, "Disky Business", text) == QMessageBox.Yes
         self.panel = DrivePanel(drives, self.NOTE, self.FOLDER_HEADING, uses_folder=self.USES_FOLDER)
         self.panel.changed.connect(self.on_folder)
 
     # -- helpers for building the right-hand side ------------------------------------------------------------
+    def progress_line(self):
+        """A new progress bar for this tab; Stop notes on it are cleared when the job ends."""
+        line = ProgressLine()
+        self.progress_lines.append(line)
+        return line
+
     def framed(self, widget):
         """The sunken frame around a map or a graph."""
         frame = QFrame()
@@ -162,6 +177,9 @@ class TabBase(QWidget):
         """Enter a job (a name) or leave it (None). Tells the window, which locks the other tabs."""
         was = self.mode
         self.mode = mode
+        if mode is None:
+            for line in self.progress_lines:
+                line.stopping = ""      # the job is over; the next one starts clean
         self.update_buttons()
         if (was is None) != (mode is None):
             self.busy_changed.emit(mode is not None)

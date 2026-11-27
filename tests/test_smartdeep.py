@@ -45,7 +45,7 @@ class Deep(unittest.TestCase):
 
     def test_reads_only_and_keeps_the_sections(self):
         data, seen = self.deep(DISK)
-        self.assertEqual(seen, [["smartctl", "-x", "-j", "/dev/sdz"]])           # no option that writes
+        self.assertEqual(seen, [["smartctl", "-j", "-x", "/dev/sdz"]])           # no option that writes
         self.assertEqual(data["model_family"], "Example Family")
         self.assertEqual(data["ata_smart_error_log"]["extended"]["count"], 1)    # old errors do not stop the read
         for gone in ("smartctl", "local_time", "json_format_version", "ata_log_directory", "seagate_farm_log"):
@@ -82,6 +82,24 @@ class Deep(unittest.TestCase):
         with self.assertRaises(ValueError) as e:
             self.deep(nothing)
         self.assertIn("Unknown USB bridge", str(e.exception))
+
+
+    def test_a_drive_that_does_not_answer_is_said_plainly(self):
+        for ended, words in (("timeout", "did not answer within 5 minutes"), ("stopped", "Stopped")):
+            def run(cmd, ended=ended, **kw):
+                done = subprocess.CompletedProcess(cmd, -9, "", "")
+                done.ended = ended
+                return done
+            with self.assertRaises(ValueError) as e:
+                smartdeep.read("sdz", run=run, is_root=True, is_block=lambda p: True, oui_file=self.oui)
+            self.assertIn(words, str(e.exception))
+
+    def test_the_maker_list_is_found_where_other_systems_keep_it(self):
+        from unittest import mock
+        with mock.patch.object(smartdeep, "OUI_FILES", ("/nonexistent/oui.txt", self.oui)):
+            self.assertEqual(smartdeep.maker(0xABCDEF), "Example Drives Ltd")
+        with mock.patch.object(smartdeep, "OUI_FILES", (self.oui, "/nonexistent/oui.txt")):
+            self.assertIsNone(smartdeep.maker(0x999999))
 
 
 class CommandLine(unittest.TestCase):
