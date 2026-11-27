@@ -130,7 +130,7 @@ class Widget(unittest.TestCase):
         self.assertGreater(DRIVE, v.cols * v.rows)      # squares really are grouped here
         sq, _ = m.squares(v.cols * v.rows)
         i = int(np.nonzero(sq == mm.BAD)[0][0])
-        t = THEMES["w98"]
+        t = v.theme                                     # whatever look is the default
         self.assertEqual(self.colour_at(v, i), QColor(t.states["bad"]).name())
         self.assertEqual(self.colour_at(v, i + 1), QColor(t.states["good"]).name())
         first, count = v.blocks_of(i)

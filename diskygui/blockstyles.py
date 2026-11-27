@@ -3,6 +3,7 @@
 from dataclasses import dataclass
 from typing import Callable
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QPainter, QPixmap
 
 
@@ -41,7 +42,16 @@ def _flat(p, s, c):
     p.fillRect(0, 0, s, s, c)
 
 
+def _soft(p, s, c):
+    """A flat square with rounded corners, for the modern looks."""
+    p.setRenderHint(QPainter.Antialiasing)
+    p.setPen(Qt.NoPen)
+    p.setBrush(c)
+    p.drawRoundedRect(0, 0, s, s, 3, 3)
+
+
 STYLES = {s.name: s for s in (
+    BlockStyle("soft", "Rounded squares", 13, 2, _soft),
     BlockStyle("bevel", "Bevelled squares", 13, 1, _bevel),
     BlockStyle("fine", "Small fine squares", 6, 1, _flat),
 )}

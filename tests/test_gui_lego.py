@@ -87,5 +87,74 @@ class Lego(unittest.TestCase):
         self.assertEqual(img.pixelColor(x, y).name(), QColor("#103020").name())    # around it, the new background
 
 
+
+@unittest.skipUnless(HAVE_QT, "PySide6 not installed")
+class ModernLook(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_a_first_start_gets_the_modern_look_light_or_dark(self):
+        from diskygui.theme import default_theme
+        self.assertEqual((default_theme(False), default_theme(True)), ("modern", "modern-dark"))
+        self.assertTrue(themes.THEMES["modern"].flat and themes.THEMES["modern-dark"].flat)
+        self.assertFalse(themes.THEMES["w98"].flat or themes.THEMES["dark"].flat or themes.THEMES["violet"].flat)   # the old looks stay
+
+    def test_modern_looks_are_rounded_and_mark_the_main_button(self):
+        from diskygui.chrome import stylesheet
+        for name in ("modern", "modern-dark"):
+            t = themes.THEMES[name]
+            css = stylesheet(t)
+            self.assertIn("border-radius", css, name)
+            self.assertNotIn("border-image", css, name)                # no bevel pictures
+            self.assertIn(f"QPushButton#primary {{ background: {t.title}", css, name)
+            from PySide6.QtGui import QColor
+
+            def contrast(one, two):                                     # the usual contrast ratio, 1 to 21
+                def light(c):
+                    parts = [v / 255 for v in QColor(c).getRgb()[:3]]
+                    parts = [v / 12.92 if v <= 0.03928 else ((v + 0.055) / 1.055) ** 2.4 for v in parts]
+                    return 0.2126 * parts[0] + 0.7152 * parts[1] + 0.0722 * parts[2]
+                hi, lo = sorted((light(one), light(two)), reverse=True)
+                return (hi + 0.05) / (lo + 0.05)
+            self.assertGreater(contrast(t.text, t.face), 7, name)       # normal text reads easily
+            self.assertGreater(contrast(t.muted, t.face), 4.5, name)    # quieter text is still readable
+            self.assertGreater(contrast(t.title_text, t.title), 4.5, name)      # the main button's words
+            self.assertGreater(contrast(t.faint, t.face), 1.8, name)    # switched-off things stay visible
+        self.assertIn("border-image", stylesheet(themes.THEMES["w98"]))       # the old look is drawn as before
+
+    def test_every_button_has_its_icon_in_the_modern_looks_and_none_in_the_old(self):
+        from PySide6.QtWidgets import QPushButton
+        from diskygui import icons
+        from diskygui.window import MainWindow
+        self.assertEqual(sorted(set(icons.BUTTON_ICONS.values()) - set(icons.SHAPES)), [])     # every icon exists
+        for name in icons.SHAPES:
+            img = icons.icon(name, "#000000").pixmap(18, 18).toImage()
+            dark = sum(img.pixelColor(x, y).alpha() > 0 for x in range(img.width()) for y in range(img.height()))
+            self.assertGreater(dark, 10, name)                         # it really draws something
+        self.assertTrue(icons.icon("no such icon", "#000000").isNull())
+        win = MainWindow(theme=themes.THEMES["modern"], drives=lambda: [])
+        self.addCleanup(win.close)
+        plain = ("Look: ", "Admin session")
+        for b in win.findChildren(QPushButton):
+            if b.text().startswith(plain):
+                continue
+            self.assertIn(b.text(), icons.BUTTON_ICONS, b.text())      # no button forgotten
+            self.assertFalse(b.icon().isNull(), b.text())
+        test = win.pages[0]
+
+        def picture(button):
+            img = button.icon().pixmap(18, 18).toImage()
+            return bytes(img.constBits())
+        play = picture(test.go)
+        test.set_busy("test")                                           # Start test became Stop test
+        self.assertEqual(test.go.text(), "Stop test")
+        self.assertFalse(test.go.icon().isNull())
+        self.assertNotEqual(picture(test.go), play)                     # and its icon changed with it
+        test.set_busy(None)
+        win.set_theme(themes.THEMES["w98"])
+        self.assertTrue(all(b.icon().isNull() for b in win.findChildren(QPushButton)))
+        self.assertEqual([p.go.objectName() for p in win.pages[:2]], ["primary", "primary"])
+
 if __name__ == "__main__":
     unittest.main()

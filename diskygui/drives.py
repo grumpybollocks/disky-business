@@ -63,6 +63,12 @@ def fs_name(fstype):
     return FS_NAMES.get(fstype, fstype or "unknown")
 
 
+def top_mounts(mounts):
+    """Mount points, the top-level one first: a file system mounted again deep inside another folder tree (a
+    bind mount) is somebody else's place, and comes last."""
+    return sorted(mounts, key=lambda m: (m.rstrip("/").count("/"), len(m)))
+
+
 def _mounted_ro(point):
     try:
         return bool(os.statvfs(point).f_flag & os.ST_RDONLY)
@@ -112,12 +118,17 @@ class Drive:
         for v in sorted(mounted, key=lambda v: -v.size):
             if v in locked:
                 continue
-            for m in v.mounts:
+            inside = [m for m in v.mounts if home == m or home.startswith(m.rstrip("/") + "/")]
+            if inside or v.is_system:
+                # The volume the system or the home folder lives on: only ever our own folder in the home
+                # folder. Such a volume is often mounted in more places (a game library, a cache); none of
+                # those is ours to write into.
+                if inside and writable(home):
+                    return os.path.join(home, TEST_FOLDER), ""
+                continue
+            for m in top_mounts(v.mounts):
                 if writable(m):
                     return m, ""
-            inside = [m for m in v.mounts if home == m or home.startswith(m.rstrip("/") + "/")]
-            if inside and writable(home):
-                return os.path.join(home, TEST_FOLDER), ""
         if len(locked) == len(mounted):
             why = next((READ_ONLY_WHY[v.fstype] for v in locked if v.fstype in READ_ONLY_WHY), "")
             return None, "Mounted read-only, so nothing can be written to it." + why

@@ -149,6 +149,34 @@ class ReadOnlyMounts(unittest.TestCase):
         folder, why = mac.target(writable=lambda p: True, mounted_ro=lambda p: False)
         self.assertEqual((folder, why), ("/run/media/someone/MAC", ""))
 
+
+class WhichFolder(unittest.TestCase):
+    """A volume can be mounted in several places. The app must never pick somebody else's."""
+    SYSTEM = ["/mnt/games/library/shared", "/", "/home", "/var/cache"]
+
+    def drive(self, mounts, fstype="btrfs"):
+        return dr.Drive("EXAMPLE", 1 << 40, "NVMe", False, dr.Health(), [dr.Volume("nvme0n1p2", 1 << 40, fstype, mounts)])
+
+    def test_the_system_volume_only_ever_gets_our_folder_in_the_home_folder(self):
+        can = lambda *ok: (lambda p: p in ok)  # noqa: E731
+        d = self.drive(self.SYSTEM)
+        folder, why = d.target("/home/x", can("/mnt/games/library/shared", "/home/x", "/var/cache"),
+                               mounted_ro=lambda p: False)
+        self.assertEqual((folder, why), ("/home/x/" + dr.TEST_FOLDER, ""))
+        folder, why = d.target("/home/x", can("/mnt/games/library/shared", "/var/cache"),
+                               mounted_ro=lambda p: False)
+        self.assertIsNone(folder)                       # the home folder is not writable: nothing else is taken
+        self.assertIn("Other folder", why)
+        home_only = self.drive(["/srv/library/bind", "/home"])
+        folder, _ = home_only.target("/home/x", can("/srv/library/bind", "/home/x"), mounted_ro=lambda p: False)
+        self.assertEqual(folder, "/home/x/" + dr.TEST_FOLDER)
+
+    def test_another_volume_gets_its_top_mount_not_one_buried_in_a_folder_tree(self):
+        d = self.drive(["/mnt/big/library/shared/deep", "/mnt/data", "/mnt/data/again"], "ext4")
+        folder, _ = d.target("/home/x", lambda p: True, mounted_ro=lambda p: False)
+        self.assertEqual(folder, "/mnt/data")
+        self.assertEqual(dr.top_mounts(["/a/b/c", "/", "/a"]), ["/", "/a", "/a/b/c"])
+
 @unittest.skipUnless(HAVE_QT, "PySide6 not installed")
 class InTheWindow(unittest.TestCase):
     @classmethod
@@ -265,6 +293,12 @@ class InTheWindow(unittest.TestCase):
             css = stylesheet(theme)
             on = css.split("QTabBar::tab:selected {")[1].split("}")[0]
             off = css.split("QTabBar::tab {")[1].split("}")[0]
+            if theme.flat:                              # modern looks: an underline in the accent colour, bold
+                self.assertIn(f"border-bottom: 3px solid {theme.tab_on}", on, theme.name)
+                self.assertIn("font-weight: bold", on, theme.name)
+                self.assertIn("border-bottom: 3px solid transparent", off, theme.name)
+                self.assertNotEqual(theme.tab_on_text, theme.dark, theme.name)      # and another text colour
+                continue
             picture = lambda rule: rule.split("border-image: url(")[1].split(")")[0]  # noqa: E731
             self.assertNotEqual(picture(on), picture(off), theme.name)
             with open(picture(on), "rb") as a, open(picture(off), "rb") as b:

@@ -6,7 +6,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLay
 from disky import trim
 
 from .defragtab import admin_wrap
-from .drives import NTFS
+from .drives import NTFS, top_mounts
 from .tabbase import TabBase
 
 ABOUT = ("TRIM tells an SSD which space is free, so it can prepare it for new data and stay fast. It never "
@@ -79,7 +79,7 @@ class TrimTab(TabBase):
         No folder is needed. Windows (NTFS) partitions are left alone. Without a picked drive, the folder
         chosen by hand counts."""
         d = self.panel.current_drive()
-        places = [v.mounts[0] for v in d.volumes if v.mounts and v.fstype not in NTFS] if d else []
+        places = [top_mounts(v.mounts)[0] for v in d.volumes if v.mounts and v.fstype not in NTFS] if d else []
         if not places and folder and d is None:
             places = [folder]
         facts = [self.info_of(place) for place in places]

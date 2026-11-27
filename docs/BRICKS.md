@@ -27,6 +27,7 @@ To add something, write the piece and put it in the table; no other file changes
 | SMART by smartctl | `disky/smartread.py` | a drive name | `smart_data` (admin rights; read-only; name checked strictly; no serial number passed on) | `tests/test_smartread.py` |
 | SMART self-test | `disky/selftest.py` | a drive name, short or long | `selftest_progress`, `selftest_result`; Stop aborts the test | `tests/test_selftest.py` |
 | Check and repair | `disky/fscare.py` | a partition name | `fs_result` (through the drive service; never mounted partitions, never NTFS) | `tests/test_fscare.py` |
+| Admin helper | `disky/helper.py` `ALLOWED` | request lines | the listed jobs, one at a time; `helper_done` after each | `tests/test_helper.py` |
 | Safety rules | `disky/safety.py` | folder | system drive yes / no, space to keep free | `tests/test_cli_safety.py` |
 | Event rules | `disky/contract.py` `EVENTS` | one event | list of what is wrong with it | used by every test above |
 | Tips | `disky/tips.py` `TIPS` | — | lines of text | `tests/test_cli_safety.py` |
@@ -43,6 +44,8 @@ add its events to `contract.EVENTS` and its mode to `contract.MODES`, describe t
 | Widget look | `diskygui/chrome.py` | — | `stylesheet(theme)` and `font(theme)`; edges are small pictures made from the theme's colours | seen in `test_gui_window.py` |
 | Tab | `diskygui/window.py` | `MainWindow.TABS` | a `TabBase` subclass (Test, Speed, SMART, Defrag, Care) | `test_gui_lego.py` |
 | Care tab | `diskygui/caretab.py` (on `trimtab.py`) | — | partitions of the picked drive; `advice(volume)` says whether it can be worked on and why not; `repair_question(...)` holds the warnings shown before a repair | `test_gui_care.py`, `test_gui_trim.py` |
+| Admin session | `diskygui/adminsession.py` | — | one password prompt for the whole window; a runner hands admin jobs to it | `test_gui_admin.py` |
+| Button icons | `diskygui/icons.py` | `SHAPES`, `BUTTON_ICONS` | a drawn shape; which button text gets which icon (modern looks only) | `test_gui_lego.py` |
 | Tab base | `diskygui/tabbase.py` | — | drive panel, engine runner, busy signal, legend helper, shutdown | every tab test |
 | Drive panel | `diskygui/drivepanel.py` | — | drive list, health box, folder; signal `changed(folder, hint)` | `test_gui_drives.py`, `test_gui_speed.py` |
 | Drive actions | `diskygui/driveactions.py` | — | `mount`, `unmount`, `remove` (unmount, then switch off) through the drive service; each returns (done, plain words). Never NTFS, never the system or home partition | `test_gui_driveactions.py` |

@@ -23,7 +23,8 @@ from .defragtab import DefragTab
 from .smarttab import SmartTab
 from .speedtab import SpeedTab
 from .tabbase import TabBase
-from .theme import DEFAULT_THEME, THEMES
+from .icons import dress
+from .theme import DEFAULT_THEME, THEMES, default_theme
 
 LEGEND = (("untouched", "Not touched"), ("written", "Written"), ("working", "Working now"), ("good", "Good"),
           ("changed", "Few bits changed"), ("bad", "Bad"), ("overwritten", "Wrong place"))
@@ -119,6 +120,7 @@ class TestTab(TabBase):
 
         self.plan_of = test_plan                        # replaced in tests
         self.go = QPushButton("Start test")
+        self.go.setObjectName("primary")                # the main action of the tab
         self.go.setToolTip("Fill the drive's free space with test files, then read all of it back")
         self.go.clicked.connect(self.start_or_stop)
         self.remove = QPushButton("Delete test files")
@@ -284,6 +286,14 @@ class TestTab(TabBase):
         self.stack.setCurrentWidget(self.verdict)
 
 
+def system_is_dark():
+    """True when the desktop is set to a dark look (Qt 6.5 and later can tell)."""
+    try:
+        return QApplication.styleHints().colorScheme() == Qt.ColorScheme.Dark
+    except (AttributeError, RuntimeError):
+        return False
+
+
 TIP_SECONDS = 30            # how long one tip stays; long enough to read it and get the joke
 
 
@@ -296,7 +306,9 @@ class MainWindow(QMainWindow):
             runners.setdefault("Test", runner)
         super().__init__()
         self.remember = theme is None           # a look passed in (tests) is neither loaded nor saved
-        saved = QSettings("disky-business", "disky-business").value("theme", DEFAULT_THEME) if self.remember else None
+        # A first start gets the modern look, light or dark as the system is; after that, the look last chosen.
+        saved = QSettings("disky-business", "disky-business").value("look", default_theme(system_is_dark())) \
+            if self.remember else None
         self.theme = theme or THEMES.get(saved, THEMES[DEFAULT_THEME])
         self.setWindowTitle("Disky Business")
         self._apply_font()
@@ -341,6 +353,7 @@ class MainWindow(QMainWindow):
             size = QSettings("disky-business", "disky-business").value("size")
             if size is not None and hasattr(size, "isValid") and size.isValid():
                 self.resize(size)
+        dress(self, self.theme)
         self._tip_no = int.from_bytes(os.urandom(2), "big") % len(tips.TIPS)
         self._held = False
         self._timer = QTimer(self)
@@ -377,6 +390,7 @@ class MainWindow(QMainWindow):
     def on_busy(self, busy):
         """One job at a time: while a tab works, the others cannot be opened."""
         self.tabs.tabBar().setEnabled(not busy)
+        dress(self, self.theme)                         # Start became Stop, or the other way round
 
     def _label_theme_button(self):
         self.theme_button.setText("Look: " + self.theme.label)
@@ -389,8 +403,9 @@ class MainWindow(QMainWindow):
         for page in self.pages:
             page.set_theme(theme)
         self._label_theme_button()
+        dress(self, theme)
         if self.remember:
-            QSettings("disky-business", "disky-business").setValue("theme", theme.name)
+            QSettings("disky-business", "disky-business").setValue("look", theme.name)
 
     def next_theme(self):
         names = list(THEMES)

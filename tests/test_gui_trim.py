@@ -97,7 +97,7 @@ class TrimTabTests(unittest.TestCase):
         from diskygui import drives as dr
         ssd = dr.Drive("EXAMPLE SSD", 1 << 40, "SSD", False, dr.Health(),
                        [dr.Volume("sdz1", 1 << 30, "ext4", ["/data"]), dr.Volume("sdz2", 1 << 30, "ntfs", ["/win"]),
-                        dr.Volume("sdz3", 1 << 30, "btrfs", ["/more", "/more/sub"]), dr.Volume("sdz4", 1, "ext4", [])],
+                        dr.Volume("sdz3", 1 << 30, "btrfs", ["/games/library/shared/deep", "/more"]), dr.Volume("sdz4", 1, "ext4", [])],
                        path="/p/ssd")
         self.win = MainWindow(theme=THEMES["w98"], drives=lambda: [ssd],
                               runners={"Care": EngineRunner([sys.executable, FAKE, "good"])})
