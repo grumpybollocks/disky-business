@@ -232,6 +232,9 @@ def main():
         avg_mib_per_s=120.0, eta_s=0)
     if scenario == "crash":
         os.kill(os.getpid(), signal.SIGKILL)
+    if scenario == "python_error":           # an engine bug: Python's report on stderr, exit code 1 like "bad"
+        sys.stdout.flush()
+        raise TypeError("'<' not supported between instances of 'NoneType' and 'int'")
     if scenario == "junk":
         sys.stdout.write("this is not JSON\n")
         say(event="from_the_future", anything=[1, 2, 3])

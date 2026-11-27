@@ -100,6 +100,14 @@ class Window(unittest.TestCase):
         self.assertIn("unexpectedly", detail)
         self.assertTrue(tab.go.isEnabled())
 
+    def test_a_python_error_in_the_engine_is_a_crash_not_a_bad_drive(self):
+        tab = self.run_to_end("python_error")
+        title, detail = self.shown(tab)
+        self.assertEqual(title, "The test did not finish.")
+        self.assertIn("unexpectedly", detail)
+        self.assertIn("TypeError", detail)                  # the engine's own last words, to report the bug
+        self.assertNotEqual(tab.verdict_state, "good")
+
     def test_engine_error_message_is_shown(self):
         title, detail = self.shown(self.run_to_end("refuse"))
         self.assertEqual(title, "Could not run.")
@@ -231,6 +239,17 @@ class Window(unittest.TestCase):
         tab = self.open("good")
         self.assertGreaterEqual(window.TIP_SECONDS, 25)
         self.assertEqual(tab.window()._timer.interval(), window.TIP_SECONDS * 1000)
+
+    def test_a_message_from_one_tab_does_not_follow_to_the_next(self):
+        from disky import tips
+        tab = self.open("good")
+        win = tab.window()
+        win.show_tip("This drive runs your system: figures vary.")
+        win.tabs.setCurrentIndex(2)                          # SMART: the speed message means nothing here
+        self.assertIn(win.tip_line.text(), tips.TIPS)
+        win.show_tip("A message for this tab.")
+        win.tabs.setCurrentIndex(2)                          # the same tab: it stays
+        self.assertEqual(win.tip_line.text(), "A message for this tab.")
 
     def test_the_app_has_an_icon_and_names_its_menu_entry(self):
         from PySide6.QtGui import QIcon

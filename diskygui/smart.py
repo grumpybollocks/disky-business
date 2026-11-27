@@ -17,7 +17,17 @@ _IFACE = {"ata": _P + "Drive.Ata", "nvme": _P + "NVMe.Controller"}
 
 NO_SMART = ("The system cannot read SMART from this drive. USB cases often do not pass it on; plugged in "
             "directly (SATA or NVMe) it would show here.")
+NO_SMART_STICK = ("USB sticks and memory cards keep no SMART record, so there is nothing to read here. The Test "
+                  "tab is the way to check one: it writes the whole stick and reads it back.")
 NOT_DECODED = "The system does not decode this number."
+# udisks2 turns "total LBAs written/read" into megabytes with one formula for every maker (libatasmart), which
+# is often wrong by far (2 EB for a 2 TB disk was seen), so the figure is not shown (unit 7 = MB).
+UNIT_MB = 7
+NOT_TRUSTED = ("The system's figure for this amount uses one formula for every maker and is often wrong, so it "
+               "is not shown. The deep scan reads it from the drive's own statistics.")
+# Error-rate items that some makers (Seagate) count every operation in: a huge raw number is normal there.
+OPERATION_COUNTS = {"rawreaderrorrate", "seekerrorrate", "hardwareeccrecovered"}
+RATED_NEAR = 10                 # "rated" items: warn when the score is this close to the limit (and below 50)
 
 # Plain words for the items that matter. Key: the name with only letters and digits, lower case (smartctl's
 # and the drive service's spellings both fit). Rule "zero": above 0 is worth watching. "cable": above 0 points
@@ -37,13 +47,19 @@ for _keys, _label, _about, _rule in (
          "Data spoiled on the way through the cable or connector. Usually the cable, not the drive.", "cable"),
         (("poweronhours",), "Hours switched on", "Total running time.", ""),
         (("powercyclecount",), "Times switched on", "", ""),
-        (("temperaturecelsius", "temperaturecelsius2", "airflowtemperaturecel", "airflowtemperaturecelsius"),
-         "Temperature", "The drive's temperature now.", ""),
+        (("temperaturecelsius", "temperaturecelsius2"), "Temperature", "The drive's temperature now.", ""),
+        (("airflowtemperaturecel", "airflowtemperaturecelsius"), "Air temperature",
+         "The air inside the drive, as the drive measures it. Usually close to the temperature above.", "extra"),
+        (("loadcyclecount", "loadunloadcyclecount"), "Head parkings",
+         "Times the heads were parked to save power. Drives are rated for a set number; the drive's score falls as "
+         "that is used up, and a drive past it wears faster.", "rated"),
+        (("startstopcount",), "Motor starts", "Times the motor spun up. The drive's score falls as its rated "
+         "number is used up.", "rated"),
         (("ssdlifeleft", "remaininglifetimeperc", "percentlifetimeremain", "mediawearoutindicator",
           "enduranceremaining"), "Life left", "The drive's own estimate of its wear. It starts at 100 %.", "life"),
         (("spinretrycount",), "Motor start retries", "Times the motor needed another try to spin up. Should stay 0.",
          ""),
-        (("commandtimeout",), "Commands that timed out", "Commands the drive did not finish in time.", ""),
+        (("commandtimeout",), "Commands that timed out", "Commands the drive did not finish in time.", "packed"),
 ):
     for _k in _keys:
         PLAIN[_k] = (_label, _about, _rule)
@@ -101,7 +117,12 @@ def _readable(name):
     return name.replace("_", " ").replace("-", " ").strip().capitalize()
 
 
-def ata_rows(attrs, names=None):
+def packs_counts(model):
+    """Seagate hard disks (models ST + digits) pack three 16-bit counts into "Command timeout"."""
+    return bool(re.match(r"ST\d", (model or "").strip()))
+
+
+def ata_rows(attrs, names=None, packed=False):
     """attrs = list of (id, name, flags, value, worst, threshold, pretty, pretty_unit, expansion).
     names = {id: name} from smartmontools' drive list, which wins over the service's own names."""
     names = names or {}
@@ -127,11 +148,27 @@ def ata_rows(attrs, names=None):
                 shown = f"{value} %"
             elif status == "OK" and rule in ("zero", "cable") and unit in (1, 3) and pretty > 0:
                 status = "Watch" if rule == "zero" else "Check the cable"
-            rows.append(Row(label, shown or "—", status, about or (NOT_DECODED if not shown else ""), True, detail,
-                            *numbers))
+            elif rule == "packed" and packed and unit == 1 and pretty > 0xFFFF:
+                # Some makers (Seagate) pack three 16-bit counts into this one number; smartctl shows them apart.
+                parts = [(pretty >> s) & 0xFFFF for s in (0, 16, 32)]
+                shown = _num(parts[0])
+                about += f" This drive keeps three counts here: {', '.join(_num(p) for p in parts)}."
+            elif (status == "OK" and rule == "rated" and 0 <= value < 50 and thresh >= 0
+                  and value <= thresh + RATED_NEAR):
+                status = "Near its rated limit"
+            rows.append(Row(label, shown or "—", status, about or (NOT_DECODED if not shown else ""),
+                            rule != "extra" or status != "OK", detail, *numbers))
         else:
             label = _readable(known) if known else f"Not named by the maker ({ident})"
-            about = "" if shown else NOT_DECODED + (f" Its {detail}." if detail else "")
+            if unit == UNIT_MB:
+                shown, about = "", NOT_TRUSTED
+            elif not shown:
+                about = NOT_DECODED + (f" Its {detail}." if detail else "")
+            elif _key(known) in OPERATION_COUNTS and unit == 1 and pretty > 1_000_000:
+                about = ("A huge number is normal on some makers' drives (Seagate counts every operation here). "
+                         f"The drive's score is what counts: {detail}.")
+            else:
+                about = ""
             rows.append(Row(label, shown or "—", status, about, status != "OK", detail, *numbers))
     return rows
 
@@ -255,7 +292,7 @@ def _unwrap(v):
 def read(drive, run=subprocess.run, names_of=smartdb.names):
     """(rows, message). rows is empty and message says why when nothing can be read."""
     if not drive.smart or not drive.path:
-        return [], NO_SMART
+        return [], NO_SMART_STICK if drive.flash else NO_SMART
     cmd = ["busctl", "--system", "--json=short", "call", "org.freedesktop.UDisks2", drive.path,
            _IFACE[drive.smart], "SmartGetAttributes", "a{sv}", "0"]
     try:
@@ -266,5 +303,5 @@ def read(drive, run=subprocess.run, names_of=smartdb.names):
     except (OSError, ValueError, KeyError, IndexError, subprocess.SubprocessError) as e:
         return [], f"Could not ask the system for SMART details ({e.__class__.__name__})."
     if drive.smart == "ata":
-        return ata_rows(data, names_of(drive.model, drive.firmware, drive.kind)), ""
+        return ata_rows(data, names_of(drive.model, drive.firmware, drive.kind), packs_counts(drive.model)), ""
     return nvme_rows({k: _unwrap(v) for k, v in data.items()}), ""

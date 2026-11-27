@@ -121,6 +121,21 @@ class Damage(unittest.TestCase):
         with Folder() as folder:
             self.assertTrue(noticed_missing(2 * MIB)(*run(folder, cut_last_file)))
 
+    def test_every_loss_says_where_it_starts(self):
+        # Found on a real drive folder (2026-11-27): a last file torn mid-sector, or data that simply ends early,
+        # gave "bad" with no place, and the command line's verdict crashed on it.
+        def torn(folder):
+            os.truncate(f(folder, 3), os.path.getsize(f(folder, 3)) - 300)
+        for damage in (torn, cut_last_file):
+            with self.subTest(damage.__name__), Folder() as folder:
+                summary, _ = run(folder, damage)
+                self.assertEqual(summary["verdict"], "bad")
+                self.assertIsNotNone(summary["first_bad_offset"])
+                self.assertLessEqual(summary["first_bad_offset"], 2 * FILE + os.path.getsize(f(folder, 3)))
+                from disky import cli
+                self.assertIn("Drive is BAD", cli.Printer.verdict(summary))
+                self.assertIn("Drive is BAD", cli.Printer.verdict(dict(summary, first_bad_offset=None)))
+
     def test_engine_that_ignores_sizes_misses_cut_files(self):
         # Broken on purpose: no expected size and no file size to compare with.
         for damage, amount in ((cut_middle_file, MIB), (cut_last_file, 2 * MIB)):

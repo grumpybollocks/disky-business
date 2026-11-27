@@ -204,9 +204,11 @@ def _link(data):
     counted = [f"{LINK_NAMES.get(r.get('name'), r.get('name'))}: {num(r['value'])}" for r in table
                if r["value"] and "COMRESET" not in str(r.get("name"))]
     crc = sum(r["value"] for r in table if "CRC" in str(r.get("name")))
+    since = ("Counted since the drive was last switched on, so these can be lower than the SMART tab's "
+             "cable errors, which cover the drive's whole life. ")
     if not counted:
-        return ["None counted."], "Counted since the drive was last switched on. No trouble on the cable or port."
-    return counted, ("Counted since the drive was last switched on. "
+        return ["None counted."], since + "No trouble on the cable or port since then."
+    return counted, (since
                      + ("Damaged data on the way points to the cable or port, not the drive: try another."
                         if crc else "Small numbers here are normal."))
 

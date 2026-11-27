@@ -67,6 +67,32 @@ class Parse(unittest.TestCase):
                          ["EXAMPLE USB HDD", "EXAMPLE USB SSD", "EXAMPLE HDD 4T", "EXAMPLE NVME 2TB", "EXAMPLE NVME 1TB",
                           "EXAMPLE SSD 240G"])     # removable first, then by size; no DVD, no loop device
 
+    def test_nvme_with_no_drive_size_takes_it_from_its_namespace(self):
+        # Real udisks2 answer (Manjaro, 2026-11-27): the NVMe Drive says Size 0, its nvme0n1 block has the size.
+        # Empty card readers say Size 0 everywhere and stay hidden.
+        answer = {"data": [{
+            D + "nvme0": drive("EXAMPLE NVME 500G", 0, NVMe_Controller={"SmartUpdated": 1}),
+            D + "reader": drive("Generic MassStorageClass", 0, bus="usb"),
+            B + "nvme0n1": block("nvme0", 500_107_862_016, ""),
+            B + "sde": block("reader", 0, ""),
+        }]}
+        found = dr.parse(answer)
+        self.assertEqual([(x.model, x.size, x.device, x.smart) for x in found],
+                         [("EXAMPLE NVME 500G", 500_107_862_016, "nvme0n1", "nvme")])
+
+    def test_a_usb_stick_is_called_a_stick_not_a_hard_disk(self):
+        # Real answer for a USB stick (2026-11-27): RotationRate -1 like a spinning disk of
+        # unknown speed, but Media "thumb". Card readers give flash_sd and the like.
+        stick = drive("EXAMPLE STICK", 61_904_781_312, rpm=-1, bus="usb")
+        stick[P + "Drive"].update({"Media": v("thumb"), "MediaCompatibility": v(["thumb"])})
+        card = drive("SD Card Reader", 31_914_983_424, rpm=-1, bus="usb")
+        card[P + "Drive"].update({"Media": v("flash_sd"), "MediaCompatibility": v(["flash_sd"])})
+        found = {x.model: x for x in dr.parse({"data": [{D + "stick": stick, D + "card": card}]})}
+        self.assertEqual(found["EXAMPLE STICK"].kind_text(), "USB stick")
+        self.assertEqual(found["SD Card Reader"].kind_text(), "Memory card")
+        self.assertEqual(found["EXAMPLE STICK"].label, "62 GB  USB stick\nEXAMPLE STICK")
+        self.assertFalse(found["EXAMPLE STICK"].spinning)
+
     def test_kind_and_label(self):
         self.assertEqual({m: x.kind_text() for m, x in self.d.items()},
                          {"EXAMPLE USB HDD": "USB HDD", "EXAMPLE USB SSD": "USB SSD", "EXAMPLE HDD 4T": "HDD", "EXAMPLE NVME 2TB": "NVMe",
@@ -183,10 +209,35 @@ class InTheWindow(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def setUp(self):
+        # Never ask the real system from a window test: its answer comes on a worker thread that can outlive
+        # the test, and a window freed on that thread crashed the test run (CI, Python 3.13).
+        from unittest import mock
+        from diskygui import smart
+        self.real_reads = []
+        patch = mock.patch.object(smart, "read", lambda d: self.real_reads.append(d.model) or ([], ""))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def tearDown(self):
+        self.assertEqual(self.real_reads, [], "a window test asked the real system for SMART data")
+
     def open(self, found):
         win = MainWindow(theme=THEMES["w98"], runner=EngineRunner([sys.executable, "-c", "pass"]), drives=lambda: found)
-        self.addCleanup(win.close)
+        for page in win.pages:
+            page.panel.read_smart = lambda d: ([], "")
+        self.addCleanup(self.close, win)
         return win.pages[0]
+
+    def close(self, win):
+        """Finish the window's slow work, then free it here on the window's own thread."""
+        import gc
+        for page in win.pages:
+            page.panel.settle()
+        win.close()
+        win.deleteLater()
+        QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        gc.collect()
 
     def test_list_health_and_folder(self):
         found = dr.parse(ANSWER)
@@ -201,6 +252,20 @@ class InTheWindow(unittest.TestCase):
         tab.drive_list.setCurrentRow(5)                         # the failing, read-only SSD
         self.assertIn("FAILING", tab.health.text())
         self.assertFalse(tab.go.isEnabled())
+
+    def test_the_pick_a_drive_hint_goes_once_a_drive_is_picked(self):
+        found = dr.parse(ANSWER)
+        win = self.open(found).window()
+        pages = [p for p in win.pages if "Pick a drive above" in p.NOTE]
+        self.assertGreaterEqual(len(pages), 4)
+        for page in pages:
+            self.assertIn("Pick a drive above", page.panel.note.text(), page.title)
+        win.pages[0].drive_list.setCurrentRow(2)
+        for page in pages:                                      # every tab shows the same drive
+            page.panel.adopt(win.pages[0].panel)
+            self.assertNotIn("Pick a drive above", page.panel.note.text(), page.title)
+        care = [p for p in pages if "partition" in p.NOTE][0]
+        self.assertEqual(care.panel.note.text(), "Pick a partition on the right.")
 
     def mounted(self):
         folder = tempfile.mkdtemp()
@@ -240,6 +305,32 @@ class InTheWindow(unittest.TestCase):
         self.assertTrue(smart_tab.panel.folder_box.isHidden() and smart_tab.panel.choose.isHidden())
         self.assertFalse(tab.panel.folder_box.isHidden() or tab.panel.choose.isHidden())
         self.assertEqual(tab.panel.choose.text(), "Other folder...")
+
+    def test_slow_work_does_not_keep_the_window_alive(self):
+        # A Qt widget freed by a worker thread crashes the program (seen on CI): the thread must not hold it.
+        import gc, weakref
+        from unittest import mock
+        from diskygui import drivepanel
+        ssd = dr.Drive("EXAMPLE SSD", 1 << 30, "SSD", False, dr.Health("ok", "Health: OK", 30, 100), smart="ata",
+                       path="/p", volumes=[dr.Volume("sdz1", 1 << 30, "ext4", [], False)])
+        held = []
+        fake = lambda target, daemon, args=(): mock.Mock(start=lambda: held.append((target, args)))   # held "forever"
+        win = MainWindow(theme=THEMES["w98"], runner=EngineRunner([sys.executable, "-c", "pass"]), drives=lambda: [ssd])
+        panel = win.pages[0].panel
+        panel.actions = mock.Mock(mount=lambda d: (True, ""), can_mount=lambda d: True)
+        with mock.patch.object(drivepanel.threading, "Thread", fake):
+            win.pages[0].drive_list.setCurrentRow(0)            # SMART read
+            panel.act("mount")                                  # drive action
+        self.assertEqual(len(held), 2)
+        gone = weakref.ref(panel)
+        win.close()
+        win.deleteLater()
+        del win, panel
+        for _ in range(3):
+            QApplication.processEvents()
+            QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+            gc.collect()
+        self.assertIsNone(gone(), "a background job still holds the drive panel")
 
     def test_health_box_shows_wear_and_warnings(self):
         from diskygui.smart import Row

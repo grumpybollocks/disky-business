@@ -199,7 +199,9 @@ class DefragTab(TabBase):
 
     def _show_worst(self):
         self.files.clear()
-        self.files.addItems([f"{w['pieces']} pieces    {size_text(w['bytes'])}    {w['path']}" for w in self.worst])
+        self.files.addItems([f"{w['pieces']} pieces    {size_text(w['bytes'])}    {w['path']}"
+                             + ("    (shared with a snapshot or a copy: left alone)" if w.get("shared") else "")
+                             for w in self.worst])
 
     def on_event(self, ev):
         kind = ev.get("event")
@@ -207,12 +209,19 @@ class DefragTab(TabBase):
             self.worst = list(ev.get("worst", []))
             self._show_worst()
             files, bad = ev.get("files", 0), ev.get("fragmented_files", 0)
-            self.fragmented = int(bad) if kind == "frag_files" else 0     # exFAT: scan only
+            common = int(ev.get("shared_files") or 0)
+            self.fragmented = int(bad) - common if kind == "frag_files" else 0     # exFAT: scan only
             pct = f" ({share_text(bad, files)})" if files else ""
             self.summary = (f"{bad} of {files} files are in more than one piece{pct}, holding "
                             f"{size_text(ev.get('fragmented_bytes', 0))} of {size_text(ev.get('file_bytes', 0))}.")
+            if common:
+                self.summary += (f" {common} of them ({size_text(ev.get('shared_bytes', 0))}) share their data with "
+                                 "a snapshot or a copy: they are left alone, because defragmenting would store them "
+                                 f"a second time. {self.fragmented} can be defragmented.")
             if ev.get("skipped"):
                 self.summary += f" {ev['skipped']} could not be read."
+            elif not files:
+                self.summary = "No files with data here to scan."
             if kind == "frag_summary":
                 self.model.set_total_blocks(int(ev.get("clusters", 0)))
         elif kind == "frag_blocks":
@@ -253,8 +262,12 @@ class DefragTab(TabBase):
                     else f"Done: {r.get('done')} of {r.get('files')} files. ")
             text += (f"{r.get('pieces_before')} pieces before, {r.get('pieces_after')} after. "
                      "The content of every file was checked: unchanged.")
-            if r.get("skipped"):
-                text += f" {r['skipped']} could not be defragmented by the system's tool and were left as they were."
+            other = int(r.get("skipped") or 0)
+            if r.get("shared"):
+                text += (f" {r['shared']} share their data with a snapshot or a copy and were left as they were "
+                         "(defragmenting them would store them twice).")
+            if other > 0:
+                text += f" {other} could not be defragmented by the system's tool and were left as they were."
             self.status.setText(text + " Scan again to see the drive as it is now.")
             self.fragmented = 0 if not r.get("stopped") else self.fragmented
         elif code == 130:
