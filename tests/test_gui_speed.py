@@ -123,5 +123,31 @@ class SpeedTabTests(unittest.TestCase):
         self.assertIn(t.states["written"], tab.swatches[0][0].styleSheet())
 
 
+    def test_bars_show_fast_and_slow_results_together(self):
+        from diskygui.speedtab import SpeedBars, SpeedGraph
+        from diskygui.theme import THEMES
+        bars = SpeedBars(THEMES["w98"])
+        self.assertEqual([bars.fraction(t) for t in ("seq_write", "rand_write")], [0.0, 0.0])    # nothing yet
+        for test, speed in (("seq_write", 44.2), ("seq_read", 359.6), ("rand_read", 15.1), ("rand_write", 2.3)):
+            bars.set_result(test, speed, f"{speed:g} MiB/s")
+        f = {t: bars.fraction(t) for t in bars.values}
+        self.assertTrue(f["rand_write"] < f["rand_read"] < f["seq_write"] < f["seq_read"] < 1.0)   # faster is longer
+        self.assertGreater(f["rand_write"], 0.1)                # the slowest is still a visible bar
+        bars.set_result("seq_read", 2961.5, "2961.5 MiB/s")     # faster than the usual top: it fills the track
+        self.assertEqual(bars.fraction("seq_read"), 1.0)
+        self.assertLess(bars.fraction("seq_write"), f["seq_write"])                                # the others shrink
+        self.assertEqual(bars.values["seq_read"].text(), "2961.5 MiB/s")
+        bars.clear()
+        self.assertEqual((bars.fraction("seq_read"), bars.values["seq_read"].text()), (0.0, "-"))
+        g = SpeedGraph(THEMES["w98"])
+        g.resize(600, 200)
+        g.total = 4
+        for i, s in enumerate((100, 100, 20, 100, 100)):        # one sudden dip
+            g.add("seq_write", i, s)
+        raw, drawn = [p.y() for p in g.points("seq_write")], [p.y() for p in g.smooth("seq_write")]
+        self.assertEqual((drawn[0], drawn[-1]), (raw[0], raw[-1]))      # the ends stay where they were measured
+        self.assertLess(drawn[2], raw[2])                               # the dip is drawn softer (y grows downwards)
+        self.assertGreater(drawn[2], raw[1])                            # but still as a dip
+
 if __name__ == "__main__":
     unittest.main()
