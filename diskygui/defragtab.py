@@ -66,6 +66,7 @@ class DefragTab(TabBase):
         self.status.setObjectName("status")
         self.status.setWordWrap(True)
         self.scan_button = QPushButton("Scan")
+        self.scan_button.setObjectName("primary")
         self.scan_button.clicked.connect(self.scan_or_stop)
         self.defrag_button = QPushButton("Defragment all")
         self.defrag_button.setToolTip("Work through every fragmented file with the system's own tool. Each file "

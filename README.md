@@ -13,14 +13,14 @@ Linux only. Works, not yet released.
 | Tab | |
 |---|---|
 | **Test** | Fills the free space, reads it back from the drive (not from memory) and gives a plain verdict. Finds fake-capacity sticks and bad blocks. Uses the f3 / H2testw method and file format |
-| **Speed** | Sequential and small random reads and writes, with a graph along the file |
+| **Speed** | Sequential and small random reads and writes: four big results with bars, and a graph of the speed along the file |
 | **SMART** | The drive's own health record in plain words: worn-out spots, unreadable spots, cable errors, life left, temperature. Short and long self-tests. Drives in USB cases are read with `smartctl` after asking |
-| **Defrag** | How fragmented the files are. Defragments one file at a time on btrfs, ext4 and XFS with the system's own tool, then proves the content is unchanged |
-| **Care** | Checks a partition's file system and repairs it with the system's own tool, after showing the warnings that apply. Also runs TRIM where the drive accepts it |
+| **Defrag** | How fragmented the files are. "Defragment all" works through every fragmented file on btrfs, ext4 and XFS with the system's own tool, and proves after each that its content is unchanged |
+| **Care** | Checks a partition's file system and repairs it with the system's own tool, after showing the warnings that apply. "Trim this drive" for SSDs that accept it |
 
 ![The SMART tab in plain words (example drive)](docs/screenshots/smart.png)
 
-Three looks: Windows 98 style (above), Dark and Deep violet (top).
+Five looks: Modern light and Modern dark (following your system), Windows 98 style, Dark and Deep violet.
 
 ## Safe by design
 
@@ -28,8 +28,8 @@ Three looks: Windows 98 style (above), Dark and Deep violet (top).
   has some, and removes only files that really hold its test data, after asking.
 - Leaves free space on the drive your system runs from, and checks it again while writing.
 - Never reads Windows (NTFS) drives, which Linux may change just by reading them.
-- No password needed, except for TRIM, the exFAT scan and work on drives that are not removable, and it asks
-  you first.
+- The admin password is asked once per session, not once per job. A small helper then stays until you close
+  the app (or press "End") and runs only Disky's own fixed jobs. Most things need no password at all.
 - Stop works at any moment (a repair, once started, is left to finish).
 - Mount, Unmount and Safely remove are in the drive list; the system and home partitions are never unmounted.
 

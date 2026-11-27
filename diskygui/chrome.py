@@ -95,7 +95,62 @@ def font(t):
     return f
 
 
+def flat_stylesheet(t):
+    """The modern looks: thin lines, rounded corners, room to breathe. No pictures needed."""
+    px = text_look(t)[0]
+    families = ", ".join(f'"{name}"' for name in t.fonts)
+    down = _arrow("down", t, [(1, 3), (4, 6), (7, 3)])
+    up = _arrow("up", t, [(1, 5), (4, 2), (7, 5)])
+    return f"""
+QWidget {{ background: {t.face}; color: {t.text}; font-family: {families}; font-size: {px}px; }}
+QLabel {{ background: transparent; }}
+QPushButton {{ background: {t.button}; border: 1px solid {t.border}; border-radius: 7px; padding: 7px 14px;
+              min-width: 70px; }}
+QPushButton:hover {{ background: {t.hover}; border-color: {t.title}; }}
+QPushButton:pressed {{ background: {t.title}; color: {t.title_text}; }}
+QPushButton#primary {{ background: {t.title}; color: {t.title_text}; border-color: {t.title}; font-weight: bold; }}
+QPushButton#primary:hover {{ background: {t.title}; border-color: {t.text}; }}
+QPushButton:disabled, QPushButton#primary:disabled {{ color: {t.faint}; background: {t.face};
+                                                     border-color: {t.border}; }}
+QTabWidget::pane {{ border: none; border-top: 1px solid {t.border}; top: -1px; }}
+QTabBar::tab {{ background: transparent; border: none; border-bottom: 3px solid transparent;
+               padding: 9px 18px; color: {t.muted}; }}
+QTabBar::tab:hover {{ color: {t.text}; }}
+QTabBar::tab:selected {{ color: {t.tab_on_text or t.title}; border-bottom: 3px solid {t.tab_on or t.title};
+                        font-weight: bold; }}
+QTabBar::tab:disabled {{ color: {t.faint}; }}
+QLineEdit, QListWidget, QTableWidget, #verdict {{ color: {t.field_text}; background: {t.field};
+                                                 border: 1px solid {t.border}; border-radius: 9px; padding: 5px; }}
+#verdict QLabel {{ color: {t.field_text}; }}
+QListWidget::item {{ padding: 5px 6px; border-radius: 6px; }}
+QListWidget::item:selected, QTableWidget::item:selected {{ background: {t.title}; color: {t.title_text}; }}
+QTableWidget {{ gridline-color: {t.border}; }}
+QHeaderView::section {{ background: {t.face}; color: {t.muted}; border: none; border-bottom: 1px solid {t.border};
+                       padding: 6px 8px; font-weight: bold; }}
+#mapframe {{ background: {t.map_bg}; border: 1px solid {t.border}; border-radius: 10px; }}
+#tipline {{ color: {t.muted}; padding: 6px 4px; }}
+#health {{ background: {t.field}; border: 1px solid {t.border}; border-radius: 9px; padding: 8px 10px; }}
+#themebutton {{ margin: 4px 6px; padding: 5px 12px; }}
+#heading {{ font-weight: bold; color: {t.muted}; }}
+#status {{ font-size: {px + 1}px; font-weight: bold; }}
+#verdict_title {{ font-size: {px + 6}px; font-weight: bold; }}
+QCheckBox {{ spacing: 8px; }}
+QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {t.muted}; border-radius: 4px;
+                       background: {t.field}; }}
+QCheckBox::indicator:checked {{ background: {t.title}; border-color: {t.title}; }}
+QScrollBar:vertical {{ background: transparent; width: 10px; margin: 2px; border: none; }}
+QScrollBar::handle:vertical {{ background: {t.faint}; border-radius: 4px; min-height: 24px; }}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{ height: 0px; }}
+QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{ background: none; }}
+QScrollBar::up-arrow:vertical {{ image: url({up}); }}
+QScrollBar::down-arrow:vertical {{ image: url({down}); }}
+QToolTip {{ background: {t.field}; color: {t.field_text}; border: 1px solid {t.border}; padding: 4px; }}
+"""
+
+
 def stylesheet(t):
+    if t.flat:
+        return flat_stylesheet(t)
     raised = _edge("raised", t, t.light, t.light2, t.shadow, t.dark, t.face)
     pressed = _edge("pressed", t, t.dark, t.shadow, t.light2, t.light, t.face)
     field = _edge("field", t, t.shadow, t.dark, t.light2, t.light, t.field)

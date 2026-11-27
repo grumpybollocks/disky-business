@@ -103,6 +103,17 @@ is an `error` with code `refused` and the reason in `message`. There is no Stop 
 |---|---|---|
 | `fs_result` | `action` (`check` / `repair`), `device`, `fs`, `ok`, `message` | `ok`: the file system is sound (check) or was repaired (repair). Exit code 0 when `ok`, else 1 |
 
+## The admin helper (added 2026-11-27, still contract version 1)
+
+`disky helper <name>` is started once by the window through the password prompt and stays for the session, so
+the password is asked once and not once per job. It prints `start`, then `helper_ready`. A request is one JSON
+line on its input: `{"cmd": "trim", "target": "/folder", "options": []}`. It runs only `trim`, `fragscan`,
+`smart`, `selftest`, `fscheck` and `fsrepair`, with only `--kind short|long` (selftest) and `--yes` (fsrepair)
+as options, one job at a time; anything else is an `error` with code `refused`. A job prints its own events
+(`start` first) and ends with `helper_done` (`code`: that job's exit code). The line `stop` stops the running
+job. The helper ends when its input closes or after 15 minutes without a job (`helper_closed`, `reason`
+`idle`).
+
 ## Stopping
 
 SIGINT or SIGTERM stops a run cleanly (exit 130). With `--stdin-stop`, a line `stop` on standard input does the

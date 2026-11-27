@@ -36,7 +36,9 @@ Your own files are never overwritten or deleted. On the drive your system runs f
 ## Speed
 
 Press **Start**. One 1 GiB file is written, measured four ways (reading and writing in one go, and many small
-reads and writes in random places) and removed again.
+reads and writes in random places) and removed again. The four results are shown big, each with a bar; the
+graph below shows the speed along the file. Bars grow on a ten-fold scale, so a slow and a fast result both
+stay visible.
 
 ## SMART: the drive's own health record
 
@@ -51,10 +53,11 @@ listed first, problems in red; **Show all items** lists the rest.
 
 ## Defrag
 
-**Scan** shows how fragmented the files are and lists the worst. On btrfs, ext4 and XFS you can defragment one
-file with the system's own tool; afterwards its content is checked to be unchanged. exFAT is scanned only (this
-asks for the admin password). Windows (NTFS) drives are not scanned or defragmented: Linux has no tool for
-that which can be trusted, and Windows does it by itself.
+**Scan** shows how fragmented the files are and lists the worst. On btrfs, ext4 and XFS, **Defragment all**
+then works through every fragmented file with the system's own tool; after each file its content is checked to
+be unchanged. **Stop** ends it after the file in hand. exFAT is scanned only (this needs admin rights). Windows
+(NTFS) drives are not scanned or defragmented: Linux has no tool for that which can be trusted, and Windows
+does it by itself.
 
 ## Care: check, repair, trim
 
@@ -64,8 +67,8 @@ Pick a partition. It must be unmounted first (**Unmount**, on the left).
 - **Repair** lets the system's own tool fix it. This changes the drive. Copy off what matters first, if you
   still can; a repair can remove damaged files, and it cannot be stopped once started.
 - Windows (NTFS) partitions are not repaired here; use Windows' own disk check.
-- **Trim now** tells an SSD which space is free. Linux does this weekly by itself, so it is rarely needed, and
-  most USB cases do not pass it on.
+- **Trim this drive** tells an SSD which space is free, for every mounted file system on it. Linux does this
+  weekly by itself, so it is rarely needed, and most USB cases do not pass it on.
 
 ## When a drive cannot be used
 
@@ -77,6 +80,13 @@ Pick a partition. It must be unmounted first (**Unmount**, on the left).
 
 ## The password
 
-Most things need no password. TRIM, the exFAT scan, SMART through a USB case, self-tests and repairs need the
-admin password, and the app asks you before the password window appears. Mounting or checking a drive that is
-built into the computer may bring up the system's own password window directly.
+Most things need no password. TRIM, the exFAT scan, SMART through a USB case and self-tests need admin rights.
+The app asks you first, and the password is asked **once per session**: after that an "Admin session open: End"
+button shows at the bottom, and no further password is asked until you press it or close the app. That session
+runs only Disky's own jobs. Mounting or checking a drive that is built into the computer may bring up the
+system's own password window directly.
+
+## Looks
+
+The **Look** button switches between Modern light, Modern dark, Windows 98 style, Dark and Deep violet. A first
+start takes Modern, light or dark as your system is set. The window remembers its look and its size.

@@ -210,6 +210,7 @@ class SpeedTab(TabBase):
         self.status.setWordWrap(True)                   # a long reason must never force the window wide
         self.status.setObjectName("status")
         self.go = QPushButton("Start")
+        self.go.setObjectName("primary")
         self.go.clicked.connect(self.start_or_stop)
         bottom = QHBoxLayout()
         bottom.addWidget(self.status, 1)

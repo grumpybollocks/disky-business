@@ -69,6 +69,7 @@ class CareTab(TrimTab):
         self.info = QLabel("Pick a drive on the left to see its partitions.")
         self.info.setWordWrap(True)
         self.check_button = QPushButton("Check")
+        self.check_button.setObjectName("primary")
         self.check_button.setToolTip("Only reads: is the file system sound?")
         self.check_button.clicked.connect(self.check)
         self.repair_button = QPushButton("Repair")

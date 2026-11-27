@@ -164,8 +164,10 @@ class Window(unittest.TestCase):
             self.assertIn(t.face, self.win.styleSheet())                        # buttons, tabs, boxes
             self.assertEqual(self.win.theme_button.text(), "Look: " + t.label)
             self.win.theme_button.click()
-        self.assertEqual([n for n, _ in seen], list(THEMES))
-        self.assertEqual(self.win.theme.name, list(THEMES)[0])                  # and round again
+        names = list(THEMES)
+        start = names.index("w98")                                              # the look this window opened with
+        self.assertEqual([n for n, _ in seen], names[start:] + names[:start])   # every look, once
+        self.assertEqual(self.win.theme.name, "w98")                            # and round again
         self.assertEqual(self.shown(tab)[0], "Drive is bad: 1 block, first at 57.0 MiB.")   # nothing lost
 
     def test_every_theme_is_complete_and_its_states_can_be_told_apart(self):

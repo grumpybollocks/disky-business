@@ -88,6 +88,7 @@ class DrivePanel(QWidget):
         head.setObjectName("heading")
         self.folder_box = QLineEdit()
         self.folder_box.setReadOnly(True)
+        self.folder_box.setFocusPolicy(Qt.NoFocus)      # it only shows where the work is done
         self.folder_box.setPlaceholderText("nothing yet")
         self.folder_box.setToolTip("Where on the drive the work is done. Picking a drive fills this in.")
         self.choose = QPushButton("Other folder...")
