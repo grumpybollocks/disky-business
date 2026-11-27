@@ -35,6 +35,7 @@ EVENTS = {
     "helper_done": {"code": INT},
     "helper_closed": {"reason": STR},
     "smart_data": {"device": STR, "data": DICT},
+    "smart_deep": {"device": STR, "data": DICT},
     "fs_result": {"action": STR, "device": STR, "fs": STR, "ok": BOOL, "message": STR},
     "speed_phase": {"test": STR, "total_bytes": OPT_INT, "seconds": OPT_NUM},
     "speed_sample": {"test": STR, "offset_bytes": INT, "mib_per_s": NUM},

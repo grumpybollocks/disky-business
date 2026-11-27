@@ -8,7 +8,7 @@ import stat
 import sys
 import threading
 
-from . import __version__, advice, engine, exfat, frag, fscare, helper, mounts, proc, safety, selftest, smartread, speed, tips, trim
+from . import __version__, advice, engine, exfat, frag, fscare, helper, mounts, proc, safety, selftest, smartdeep, smartread, speed, tips, trim
 
 EXIT = {"good": 0, "bad": 1, "not_verified": 2, "nothing_to_check": 3, "stopped": 130}
 _UNITS = {"K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}
@@ -253,16 +253,27 @@ def _defragall(args, emit, stop):
     return 130 if r["stopped"] else 0
 
 
+def _smart_options(s):
+    s.add_argument("--deep", action="store_true",
+                   help="everything the drive knows: identity, firmware, error and self-test logs, statistics")
+    s.add_argument("--serial", action="store_true", help="with --deep: include the serial number (left out by "
+                   "default, because it identifies the drive)")
+
+
 def _smart(args, emit, stop):
+    if args.serial and not args.deep:
+        emit({"event": "error", "code": "bad_options", "message": "--serial goes with --deep."})
+        return 2
     try:
-        data = smartread.read(args.folder)
+        data = smartdeep.read(args.folder, serial=args.serial) if args.deep else smartread.read(args.folder)
     except PermissionError as e:
         emit({"event": "error", "code": "needs_admin", "message": str(e)})
         return 3
     except ValueError as e:
         emit({"event": "error", "code": "no_smart", "message": str(e)})
         return 3
-    emit({"event": "smart_data", "device": os.path.basename(args.folder), "data": data})
+    emit({"event": "smart_deep" if args.deep else "smart_data", "device": os.path.basename(args.folder),
+          "data": data})
     emit({"event": "done"})
     return 0
 
@@ -388,8 +399,8 @@ COMMANDS = {c.name: c for c in (
     Command("helper", "the admin helper the window keeps for a session: runs trim, fragscan, smart, selftest, "
             "fscheck and fsrepair on request (see disky/helper.py)", _helper, target="any",
             target_help="a name for the session; not used"),
-    Command("smart", "read-only: the drive's SMART record through smartctl (needs admin rights; for USB cases)",
-            _smart, target="any", target_help="the drive, e.g. sdX"),
+    Command("smart", "read-only: the drive's SMART record through smartctl (needs admin rights; for USB cases "
+            "and the deep scan)", _smart, _smart_options, target="any", target_help="the drive, e.g. sdX"),
     Command("selftest", "let the drive run its own SMART self-test and follow it (the system asks for the "
             "admin password)", _selftest, _selftest_options, target="any", target_help="the drive, e.g. sdX"),
     Command("fscheck", "read-only: is this partition's file system sound? (the system's own tool)", _fscare,
