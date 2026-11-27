@@ -63,6 +63,26 @@ def frag(scenario, mode, target):
     if scenario == "nopassword":
         return 126
     worst = [{"pieces": 64, "bytes": 8 * MIB, "path": "/drive/big.bin"}, {"pieces": 3, "bytes": 4096, "path": "/drive/small.txt"}]
+    if mode == "defragall":
+        if scenario == "toolfail":
+            say(event="error", code="content_changed", message="The content of /drive/big.bin changed during "
+                "defragmenting. Stop using e4defrag on this drive.")
+            return 1
+        say(event="defrag_progress", index=1, total=2, path="/drive/big.bin", before=64, after=1, skipped=False)
+        if scenario == "slow":
+            stop = []
+            signal.signal(signal.SIGINT, lambda *_: stop.append(1))
+            while not stop:
+                time.sleep(0.02)
+            say(event="defragall_result", files=2, done=1, improved=1, skipped=0, pieces_before=64, pieces_after=1,
+                stopped=True)
+            say(event="done", stopped=True)
+            return 130
+        say(event="defrag_progress", index=2, total=2, path="/drive/small.txt", before=3, after=3, skipped=True)
+        say(event="defragall_result", files=2, done=1, improved=1, skipped=1, pieces_before=64, pieces_after=1,
+            stopped=False)
+        say(event="done", stopped=False)
+        return 0
     if mode == "defrag" and scenario == "toolfail":
         say(event="defrag_result", path=target, fs="ext4", tool="e4defrag", exit=1, before=64, after=64,
             changed_content=False)
@@ -175,7 +195,7 @@ def main():
         say(event="trim_result", mount="/drive", trimmed_bytes=5 * (1 << 30), message="/drive: 5 GiB (5368709120 bytes) trimmed")
         say(event="done")
         return 0
-    if mode in ("fragfiles", "fragscan", "defrag"):
+    if mode in ("fragfiles", "fragscan", "defrag", "defragall"):
         return frag(scenario, mode, sys.argv[3])
     say(event="start", contract=1, version="fake", mode="test", block_bytes=MIB, sector_bytes=512)
     if scenario == "warn":

@@ -61,6 +61,17 @@ Other exits: 3 for an `error` event.
 
 `system_drive`, `short_file`, `stopped`, `test_file`, `kept_file` (a file with a test file's name but no test data in it; `clean` never removes it), `reserve_reached` (free space dropped during writing; writing stopped to keep the reserve), `missing_file` (a test file in the middle of the numbering is gone; counted as missing), `timeout` (a system tool ran past its time limit and was ended) (warnings); `no_folder`, `existing_files`, `os_error` (errors).
 
+## Defragment all (added 2026-11-27, still contract version 1)
+
+`disky defragall <folder>`: every fragmented file under the folder, the most fragmented first, each with the
+system's own tool and each checked afterwards to be unchanged. Stop ends it after the file in hand (exit 130).
+A file the tool cannot handle is skipped. A changed file is an `error` `content_changed` and ends the run.
+
+| Event | Fields | Meaning |
+|---|---|---|
+| `defrag_progress` | `index`, `total`, `path`, `before`, `after`, `skipped` | One file done: its pieces before and after |
+| `defragall_result` | `files`, `done`, `improved`, `skipped`, `pieces_before`, `pieces_after`, `stopped` | The totals |
+
 ## SMART through smartctl (added 2026-11-26, still contract version 1)
 
 `disky smart <drive>` (a name like `sdb`), started by the window through the password prompt for drives the

@@ -153,3 +153,37 @@ def scan_folder(folder, worst=50, stop=None):
                     top = sorted(top, reverse=True)[:worst]
     out["worst"] = [{"pieces": n, "bytes": b, "path": p} for n, b, p in sorted(top, reverse=True)[:worst]]
     return out
+
+
+def defrag_all(folder, emit, stop=None, scan=None, one=None):
+    """Defragment every fragmented file under `folder`, the most fragmented first, with the system's tool.
+
+    Emits `defrag_progress` after each file and returns the totals. Stop ends it after the file in hand (the
+    tool itself is also told to stop). A file the tool cannot handle is skipped and counted. If a file's
+    content changed, RuntimeError goes up at once: nothing more is touched.
+    """
+    scan, one = scan or scan_folder, one or defrag_file
+    found = scan(folder, worst=10**9, stop=stop)["worst"]
+    out = {"files": len(found), "done": 0, "improved": 0, "skipped": 0, "pieces_before": 0, "pieces_after": 0,
+           "stopped": False}
+    for i, item in enumerate(found):
+        if stop is not None and stop.is_set():
+            out["stopped"] = True
+            break
+        try:
+            r = one(item["path"], stop=stop)
+        except (NotSupported, OSError):
+            out["skipped"] += 1
+            emit({"event": "defrag_progress", "index": i + 1, "total": len(found), "path": item["path"],
+                  "before": item["pieces"], "after": item["pieces"], "skipped": True})
+            continue
+        out["done"] += 1
+        out["pieces_before"] += r["before"]
+        out["pieces_after"] += r["after"]
+        out["improved"] += r["after"] < r["before"]
+        emit({"event": "defrag_progress", "index": i + 1, "total": len(found), "path": item["path"],
+              "before": r["before"], "after": r["after"], "skipped": False})
+        if r.get("ended") == "stopped":
+            out["stopped"] = True
+            break
+    return out
