@@ -180,7 +180,7 @@ no trustworthy defragmenter exists for them on Linux (exfatprogs disabled its ow
 ## TRIM (added 2026-11-26, still contract version 1)
 
 `disky trim <folder> --json`: `trim_info` (`mount`, `device`, `supported`, `discard_max_bytes`,
-`discard_granularity`, `rotational?`), then either an `error` (`not_supported`: the drive or its USB case does not
+`discard_granularity`, `rotational?`, `auto_discard`: the file system is mounted with `discard` and trims by itself), then either an `error` (`not_supported`: the drive or its USB case does not
 accept TRIM; `needs_admin`; `os_error`: fstrim failed) with nothing run, or `trim_result` (`mount`,
 `trimmed_bytes?`, `message` = fstrim's own words) and `done`. Runs `fstrim -v` on the folder's mount point;
 fstrim never touches files.

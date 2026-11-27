@@ -17,6 +17,8 @@ _IFACE = {"ata": _P + "Drive.Ata", "nvme": _P + "NVMe.Controller"}
 
 NO_SMART = ("The system cannot read SMART from this drive. USB cases often do not pass it on; plugged in "
             "directly (SATA or NVMe) it would show here.")
+NO_SMART_STICK = ("USB sticks and memory cards keep no SMART record, so there is nothing to read here. The Test "
+                  "tab is the way to check one: it writes the whole stick and reads it back.")
 NOT_DECODED = "The system does not decode this number."
 # udisks2 turns "total LBAs written/read" into megabytes with one formula for every maker (libatasmart), which
 # is often wrong by far (2 EB for a 2 TB disk was seen), so the figure is not shown (unit 7 = MB).
@@ -285,7 +287,7 @@ def _unwrap(v):
 def read(drive, run=subprocess.run, names_of=smartdb.names):
     """(rows, message). rows is empty and message says why when nothing can be read."""
     if not drive.smart or not drive.path:
-        return [], NO_SMART
+        return [], NO_SMART_STICK if drive.kind == "stick" else NO_SMART
     cmd = ["busctl", "--system", "--json=short", "call", "org.freedesktop.UDisks2", drive.path,
            _IFACE[drive.smart], "SmartGetAttributes", "a{sv}", "0"]
     try:

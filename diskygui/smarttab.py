@@ -152,6 +152,8 @@ class SmartTab(TabBase):
                 # The health box said "no health data"; now there is some.
                 self.panel.health.setText("\n".join(["Read with the admin password:"]
                                                     + (smart.brief(self.rows) or ["No warnings."])))
+            elif d.kind == "stick":
+                self.rows, msg = [], smart.NO_SMART_STICK
             else:
                 self.rows, msg = [], smart.NO_SMART + (
                     " \"Read with admin password\" reads it with smartctl instead." if d.device else "")
@@ -306,7 +308,7 @@ class SmartTab(TabBase):
 
     def update_buttons(self):
         d = self.panel.current_drive()
-        self.usb_button.setVisible(bool(d and not d.smart and d.device))
+        self.usb_button.setVisible(bool(d and not d.smart and d.device and d.kind != "stick"))
         testable = bool(d and d.smart and d.device)
         self.short_button.setVisible(testable and self.mode != "selftest")
         self.long_button.setVisible(testable and self.mode != "selftest")

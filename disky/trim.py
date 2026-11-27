@@ -19,6 +19,22 @@ def mount_of(path, mountinfo="/proc/self/mountinfo"):
     return point, device
 
 
+def auto_discard(point, mountinfo="/proc/self/mountinfo"):
+    """True when the file system mounted at `point` already trims by itself as files are deleted (mounted with
+    the `discard` option, e.g. btrfs `discard=async`)."""
+    try:
+        with open(mountinfo) as f:
+            for line in f:
+                left, _, right = line.partition(" - ")
+                fields = left.split()
+                if len(fields) > 5 and mounts.unescape(fields[4]) == point:
+                    opts = fields[5].split(",") + (right.split()[2].split(",") if len(right.split()) > 2 else [])
+                    return any(o == "discard" or o.startswith("discard=") for o in opts)
+    except OSError:
+        pass
+    return False
+
+
 def _read(path):
     try:
         with open(path) as f:
@@ -31,7 +47,7 @@ def info(path, mountinfo="/proc/self/mountinfo", sys_root=_SYS):
     """What the kernel says about TRIM for the drive that holds `path`."""
     point, device = mount_of(path, mountinfo)
     out = {"mount": point, "device": device or "", "supported": False, "discard_max_bytes": 0,
-           "discard_granularity": 0, "rotational": None}
+           "discard_granularity": 0, "rotational": None, "auto_discard": auto_discard(point, mountinfo)}
     if not device or not device.startswith("/dev/"):
         return out
     node = os.path.join(sys_root, os.path.basename(os.path.realpath(device)))
