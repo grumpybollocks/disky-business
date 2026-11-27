@@ -218,6 +218,24 @@ class DefragAll(unittest.TestCase):
         self.assertEqual(order, ["/d/odd", "/d/ok"])                      # the shared file is never touched
         self.assertEqual((r["files"], r["done"], r["shared"], r["skipped"]), (2, 1, 1, 1))
 
+    def test_a_file_the_tool_refused_is_not_counted_as_done(self):
+        # Found 2026-11-27: btrfs refused a file it may not change (exit 1) and the run said "Done: 1 of 1".
+        found = {"worst": [{"pieces": 5, "bytes": 1, "path": "/d/theirs", "shared": False},
+                           {"pieces": 4, "bytes": 1, "path": "/d/mine", "shared": False}]}
+        seen = []
+
+        def one(path, stop=None):
+            return {"before": 5 if path == "/d/theirs" else 4, "after": 5 if path == "/d/theirs" else 1,
+                    "ended": "", "exit": 1 if path == "/d/theirs" else 0}
+        r = frag.defrag_all("/d", seen.append, scan=lambda f, worst, stop: found, one=one)
+        self.assertEqual((r["done"], r["skipped"], r["pieces_before"], r["pieces_after"]), (1, 1, 4, 1))
+        self.assertEqual([e["skipped"] for e in seen], [True, False])
+
+    def test_the_tools_reason_on_one_line(self):
+        self.assertEqual(frag._tool_words("ERROR: defrag failed on /x: Operation not permitted\ntotal 1 failures\n"),
+                         "ERROR: defrag failed on /x: Operation not permitted")
+        self.assertEqual(frag._tool_words("all fine\n"), "all fine")
+
     def test_stop_ends_it_after_the_file_in_hand(self):
         import threading
         stop, order = threading.Event(), []
@@ -243,6 +261,81 @@ class DefragAll(unittest.TestCase):
         with mock.patch.object(frag, "fs_type", lambda p: "ntfs3"):
             with self.assertRaises(frag.NotSupported):
                 frag.defrag_all("/mnt/windows", lambda e: None, one=lambda *a, **k: self.fail("must not run"))
+
+
+class Layout(unittest.TestCase):
+    """Found 2026-11-27: the Defrag map stayed empty on btrfs, ext4 and XFS: only exFAT scans filled it."""
+    M = 1 << 20
+
+    def test_ext4_map_spans_the_file_system_from_its_start(self):
+        base, block, state = frag.layout([(10 * self.M, self.M, 1), (90 * self.M, 2 * self.M, 2)], "ext4", 100 * self.M,
+                                         max_blocks=100)
+        self.assertEqual((base, block, len(state)), (0, self.M, 100))
+        self.assertEqual([r for r in frag.layout_ranges(state)], [(10, 1, "whole"), (90, 2, "fragmented")])
+
+    def test_btrfs_map_spans_its_own_address_space_only(self):
+        base, block, state = frag.layout([(1000 * self.M, self.M, 1), (1010 * self.M, self.M, 2)], "btrfs",
+                                         50 * self.M, max_blocks=100)
+        self.assertEqual(base, 1000 * self.M)
+        self.assertEqual(list(frag.layout_ranges(state))[0][:1], (0,))
+        self.assertLessEqual(len(state), 100)
+
+    def test_a_block_shows_the_highest_of_what_lies_in_it(self):
+        _, _, state = frag.layout([(0, 100, 1), (200, 100, 2), (300, 50, 1)], "ext4", 4096)
+        self.assertEqual(list(frag.layout_ranges(state)), [(0, 1, "fragmented")])
+
+    def test_a_real_scan_fills_the_map_and_names_what_it_could_not_read(self):
+        with Folder() as d:
+            path = fragmented(d)
+            locked = os.path.join(d, "locked")
+            os.mkdir(locked, 0o000)
+            try:
+                r = frag.scan_folder(d, with_layout=True)
+            except frag.NotSupported:
+                self.skipTest(f"{FS} gives no extent map")
+            finally:
+                os.chmod(locked, 0o755)                                 # so the test folder can be removed
+                os.rmdir(locked)
+            base, block, state, kind = r["layout"]
+            names = {n for _, _, n in frag.layout_ranges(state)}
+            self.assertTrue(names & {"whole", "fragmented"})          # the file is on the map
+            if os.geteuid() != 0:                                       # root opens every folder
+                self.assertEqual(r["skipped"], 1)
+                self.assertEqual(r["skipped_files"][0]["path"], locked)
+                self.assertIn("folder not opened", r["skipped_files"][0]["why"])
+            os.unlink(path)
+
+    def test_sizes_count_what_lies_on_the_disk_once(self):
+        # Found 2026-11-27: two sparse disk images (466 GiB each, 0 on disk) made a 500 GB drive show 1 TiB.
+        with Folder() as d:
+            sparse = os.path.join(d, "disk.img")
+            with open(sparse, "wb") as f:
+                f.truncate(1 << 30)                     # 1 GiB long...
+                f.write(b"x" * 4096)                    # ...4 KiB of it on the disk
+                os.fsync(f.fileno())
+            os.link(sparse, os.path.join(d, "same.img"))  # the same file under a second name
+            try:
+                r = frag.scan_folder(d)
+            except frag.NotSupported:
+                self.skipTest(f"{FS} gives no extent map")
+            finally:
+                for name in os.listdir(d):
+                    os.unlink(os.path.join(d, name))
+        self.assertEqual(r["files"], 1)
+        self.assertLess(r["file_bytes"], 1 << 20)
+
+    def test_places_that_are_not_on_the_disk_are_left_off_the_map(self):
+        # Inline and not-yet-written extents report place 0; on btrfs that would stretch the map to address 0.
+        fake = [(0, 0, 4096, frag.NO_PLACE & 0x200), (4096, 5000 * self.M, 4096, 0)]
+        with Folder() as d:
+            p = os.path.join(d, "f")
+            with open(p, "wb") as f:
+                f.write(b"x" * 8192)
+            with mock.patch.object(frag, "extents", lambda path: fake), mock.patch.object(frag, "fs_type", lambda p: "btrfs"):
+                r = frag.scan_folder(d, with_layout=True)
+            os.unlink(p)
+        self.assertEqual(r["layout"][0], 5000 * self.M)                 # the map starts at the real place
+
 
 if __name__ == "__main__":
     unittest.main()

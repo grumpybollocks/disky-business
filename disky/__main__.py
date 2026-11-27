@@ -10,4 +10,11 @@ for _sig in (signal.SIGINT, signal.SIGTERM):
 
 from .cli import main  # noqa: E402
 
-sys.exit(main(stop=STOP))
+try:
+    sys.exit(main(stop=STOP))
+except BrokenPipeError:
+    # Whoever read the output stopped reading (`disky ... | head`). Like any command-line tool: end quietly,
+    # with no traceback. Test files written so far stay, as after Stop.
+    import os
+    os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+    sys.exit(141)

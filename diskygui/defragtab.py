@@ -22,6 +22,7 @@ from .tabbase import TabBase
 LEGEND = (("free", "Free"), ("other", "Other data"), ("whole", "File in one piece"), ("fragmented", "File in pieces"))
 AS_STATE = {"free": "untouched", "other": "written", "whole": "good", "fragmented": "bad"}
 MAP_CODE = {"free": UNTOUCHED, "other": WRITTEN, "whole": GOOD, "fragmented": BAD}
+CAPTION = "Drive layout: where the files lie (a scan only reads)"
 NTFS_WHY = ("Windows (NTFS) drives are not scanned or defragmented here. Linux has no NTFS defragmenter that can "
             "be trusted, and Linux may change a damaged NTFS drive just by reading it. Windows defragments its "
             "own drives by itself (Optimise Drives).")
@@ -53,7 +54,7 @@ class DefragTab(TabBase):
         self.device_of = safety.mount_source
         self.worst = []
         self.summary = self.result = None
-        self.model = MapModel()
+        self.model = MapModel(layout=True)
         self.map = BlockMap(self.model, theme)
         self.map.setMinimumHeight(120)
         frame = self.framed(self.map)
@@ -85,8 +86,9 @@ class DefragTab(TabBase):
         bottom.addLayout(words, 1)
         bottom.addLayout(buttons)
 
-        caption = QLabel("Drive layout: where the files lie (a scan only reads)")
+        self.caption = caption = QLabel(CAPTION)
         caption.setObjectName("caption")
+        caption.setWordWrap(True)
         right = QVBoxLayout()
         right.addWidget(caption)
         right.addWidget(frame, 1)
@@ -110,6 +112,8 @@ class DefragTab(TabBase):
         if self.mode is None:
             self.worst = []
             self.files.clear()
+            self.fragmented = 0                 # the last scan was of another place: nothing to defragment here yet
+            self.caption.setText(CAPTION)
             self.model.reset()
             self.model.version += 1
             fs = self.kind()
@@ -171,6 +175,8 @@ class DefragTab(TabBase):
             self._begin("scan", "Scanning...")
             self.worst = []
             self.files.clear()
+            self.fragmented = 0
+            self.caption.setText(CAPTION)
             self.model.reset()
             self.model.version += 1
             self.runner.start(mode, target, wrap=wrap)
@@ -219,11 +225,26 @@ class DefragTab(TabBase):
                                  "a snapshot or a copy: they are left alone, because defragmenting would store them "
                                  f"a second time. {self.fragmented} can be defragmented.")
             if ev.get("skipped"):
-                self.summary += f" {ev['skipped']} could not be read."
+                n, named = int(ev["skipped"]), list(ev.get("skipped_files") or [])
+                self.summary += f" {n} could not be read"
+                if named:
+                    first = named[0]
+                    self.summary += (f", e.g. {os.path.basename(str(first.get('path', '')).rstrip('/')) or '?'} "
+                                     f"({first.get('why', 'no reason given')})")
+                self.summary += "."
             elif not files:
                 self.summary = "No files with data here to scan."
             if kind == "frag_summary":
                 self.model.set_total_blocks(int(ev.get("clusters", 0)))
+        elif kind == "frag_layout":
+            self.model.set_total_blocks(int(ev.get("blocks", 0)))
+            if ev.get("address") == "btrfs":
+                self.caption.setText("Where the files lie, in btrfs's own address space, not the order on the disk "
+                                     "(a scan only reads)")
+            note = "" if ev.get("whole_drive", True) else (" The map shows only the files in this folder; the rest "
+                                                            "of the drive shows as free.")
+            if self.summary is not None:
+                self.summary += note
         elif kind == "frag_blocks":
             code = MAP_CODE.get(ev.get("state"))
             if code is not None and code != UNTOUCHED:

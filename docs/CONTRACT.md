@@ -69,6 +69,17 @@ A file the tool cannot handle is skipped. A fragmented file that shares its data
 
 `frag_files` also gives `shared_files` and `shared_bytes` (of the fragmented files, those shared with a snapshot or a copy), and each `worst` entry has `shared` (true/false). Piece counts join compressed extents that lie one after another (btrfs `compress=`), which the kernel reports with their uncompressed length.
 
+Sizes (`file_bytes`, `fragmented_bytes`, `shared_bytes`, `worst[].bytes`) count what lies on the disk: a sparse
+file counts its allocated part, and a file with several names (hard links) is counted once. `skipped_files` names
+the first five files or folders that could not be read, each `{path, why}`.
+
+After `frag_files`, `disky fragfiles` gives the layout map (added 2026-11-27, still contract version 1):
+`frag_layout` (`base_bytes`, `block_bytes`, `blocks`, `address`: `disk` (ext4, XFS: places on the file system) or
+`btrfs` (btrfs's own address space, not the order on the disk; the map spans from the first to the last place
+found), `whole_drive`: false when only a folder was scanned, so the rest of the drive shows as free), then
+`frag_blocks` (`first`, `count`, `state`: `whole` or `fragmented`; free runs are not sent). An older window
+ignores these events.
+
 | Event | Fields | Meaning |
 |---|---|---|
 | `defrag_progress` | `index`, `total`, `path`, `before`, `after`, `skipped` | One file done: its pieces before and after |

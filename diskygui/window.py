@@ -76,6 +76,7 @@ def test_plan(folder, statvfs=os.statvfs, files=None, system=None):
 
 class TestTab(TabBase):
     title = "Test"
+    OWN_TEST_FOLDER = True
     NOTE = "Pick a drive above. The test fills the drive's free space, then reads it all back."
 
     def __init__(self, theme, runner=None, tip=None, drives=None, parent=None):

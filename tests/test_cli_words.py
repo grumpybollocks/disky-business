@@ -9,7 +9,7 @@ import unittest
 from disky import cli, contract
 
 # Events that carry no result of their own: their content is shown by another event, or only the window uses it.
-QUIET = {"start", "phase", "file", "blocks", "done", "frag_blocks", "helper_ready", "helper_done", "helper_closed",
+QUIET = {"start", "phase", "file", "blocks", "done", "frag_blocks", "frag_layout", "helper_ready", "helper_done", "helper_closed",
          "speed_phase", "speed_sample", "trim_info"}
 SPECIAL = {"speed_result": {"test": "seq_write"}, "progress": {"phase": "write"},
            "summary": {"verdict": "good", "sectors": {}}, "smart_data": {"data": {"model_name": "EXAMPLE"}},

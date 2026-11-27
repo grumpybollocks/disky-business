@@ -59,7 +59,7 @@ class DefragTabTests(unittest.TestCase):
         self.assertFalse(tab.defrag_button.isEnabled())                             # nothing scanned yet
         self.scan(tab)
         self.assertEqual(tab.status.text(), "2 of 10 files are in more than one piece (20.0 %), holding 8.0 MiB "
-                                            "of 20.0 MiB. 1 could not be read.")
+                                            "of 20.0 MiB. 1 could not be read, e.g. vm.qcow2 (Permission denied).")
         self.assertEqual([tab.files.item(i).text() for i in range(2)],
                          ["64 pieces    8.0 MiB    /drive/big.bin", "3 pieces    4.0 KiB    /drive/small.txt"])
         self.assertEqual((tab.defrag_button.text(), tab.defrag_button.isEnabled()), ("Defragment all", True))
@@ -100,6 +100,75 @@ class DefragTabTests(unittest.TestCase):
         tab.defrag_button.click()
         self.wait(lambda: tab.mode is None)
         self.assertIn("changed during defragmenting", tab.status.text())
+
+    def squares(self, tab):
+        """What the map really shows: the state of every square, by name."""
+        from diskygui import mapmodel
+        out, _ = tab.model.squares(400)
+        return {mapmodel.NAMES[int(c)] for c in out}
+
+    def test_the_map_shows_where_the_files_lie_on_linux_file_systems(self):
+        # Found 2026-11-27 on a real ext4 drive: after a scan every square was still "free".
+        tab = self.open("good", "ext4")
+        self.scan(tab)
+        self.assertEqual(len(tab.model.states), 1000)
+        self.assertTrue({"good", "bad"} <= self.squares(tab))         # files in one piece and in pieces, drawn
+        self.assertIn("untouched", self.squares(tab))                 # and the free space between them
+        self.assertEqual(tab.caption.text(), "Drive layout: where the files lie (a scan only reads)")
+        self.assertNotIn("only the files in this folder", tab.status.text())
+        tab.map.refresh() if hasattr(tab.map, "refresh") else None
+        self.app.processEvents()
+        img = tab.map.grab().toImage()                                # and it really paints them
+        colours = {img.pixelColor(x, y).name() for x in range(0, img.width(), 7) for y in range(0, img.height(), 7)}
+        self.assertIn(tab.theme.frag["fragmented"].lower(), colours)
+
+    def test_a_file_in_a_square_is_never_hidden_by_free_space(self):
+        from diskygui.mapmodel import MapModel, GOOD, BAD
+        m = MapModel(layout=True)
+        m.set_total_blocks(1000)
+        m.set_blocks(500, 1, BAD)
+        m.set_blocks(10, 1, GOOD)
+        m.cursor = None
+        out, _ = m.squares(10)                                         # 100 blocks per square
+        self.assertEqual((int(out[0]), int(out[5])), (GOOD, BAD))
+
+    def test_btrfs_and_folder_scans_say_what_the_map_is(self):
+        tab = self.open("btrfs_addresses", "btrfs")
+        self.scan(tab)
+        self.assertIn("btrfs's own address space", tab.caption.text())
+        tab = self.open("folder_only", "ext4")
+        self.scan(tab)
+        self.assertIn("The map shows only the files in this folder", tab.status.text())
+
+    def test_an_old_engine_without_a_layout_still_works(self):
+        tab = self.open("old_engine", "ext4")
+        self.scan(tab)
+        self.assertIn("2 of 10 files", tab.status.text())
+        self.assertEqual(self.squares(tab), set())
+
+    def test_another_place_never_inherits_the_last_scans_defragment_all(self):
+        # Found 2026-11-27: after a scan, picking another drive kept "Defragment all" on for a place never scanned.
+        tab = self.open("good", "btrfs")
+        self.scan(tab)
+        self.assertTrue(tab.defrag_button.isEnabled())
+        tab.set_folder("/another/drive")
+        self.assertFalse(tab.defrag_button.isEnabled())
+        self.assertEqual((tab.fragmented, self.squares(tab)), (0, set()))
+
+    def test_on_the_system_drive_other_tabs_work_in_the_home_folder_not_the_test_folder(self):
+        # Found 2026-11-27: picking the system NVMe, Defrag scanned "~/Disky Business test files", which exists
+        # only once a test made it: "Not a folder".
+        from diskygui.drives import TEST_FOLDER
+        tab = self.open("good", "btrfs")
+        tab.set_folder(os.path.join("/home/someone", TEST_FOLDER))
+        self.assertEqual(tab.folder, "/home/someone")
+        self.assertEqual(tab.panel.folder_box.text(), "/home/someone")          # and that is what it shows
+        speed = next(p for p in self.win.pages if p.title == "Speed")
+        test = next(p for p in self.win.pages if p.title == "Test")
+        speed.set_folder(os.path.join("/home/someone", TEST_FOLDER))
+        test.set_folder(os.path.join("/home/someone", TEST_FOLDER))
+        self.assertEqual(speed.folder, "/home/someone")
+        self.assertEqual(test.folder, os.path.join("/home/someone", TEST_FOLDER))    # the Test tab keeps its own
 
     def test_exfat_offers_no_defragment_all(self):
         tab = self.open("good", "exfat")
