@@ -75,6 +75,7 @@ class Cards(unittest.TestCase):
         self.assertEqual(cards["Lifetime statistics"][0], ["Data written: 1.0 TB", "Wear used: 13 %"])  # plain only
         self.assertEqual(cards["Link errors (cable and port)"][0], ["Data damaged on the cable: 7"])
         self.assertIn("cable or port", cards["Link errors (cable and port)"][1])
+        self.assertIn("whole life", cards["Link errors (cable and port)"][1])   # not read as contradicting SMART
         self.assertEqual(cards["Temperature record"][0],
                          ["Last 4 hours: lowest 30 °C, highest 41 °C", "Now: 33 °C (the drive's limit: 70 °C)"])
 

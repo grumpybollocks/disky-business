@@ -220,6 +220,8 @@ class DefragTab(TabBase):
                                  f"a second time. {self.fragmented} can be defragmented.")
             if ev.get("skipped"):
                 self.summary += f" {ev['skipped']} could not be read."
+            elif not files:
+                self.summary = "No files with data here to scan."
             if kind == "frag_summary":
                 self.model.set_total_blocks(int(ev.get("clusters", 0)))
         elif kind == "frag_blocks":

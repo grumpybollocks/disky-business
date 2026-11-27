@@ -94,6 +94,7 @@ class DrivePanel(QWidget):
         self.choose = QPushButton("Other folder...")
         self.choose.setToolTip("For special cases: work in a folder you choose yourself")
         self.choose.clicked.connect(self.choose_folder)
+        self.note_text = note
         self.note = QLabel(note)
         self.note.setWordWrap(True)
         col.addWidget(dhead)
@@ -200,9 +201,20 @@ class DrivePanel(QWidget):
         row = self.row()
         return self.drives[row] if 0 <= row < len(self.drives) else None
 
+    def show_note(self):
+        """The hint under the folder box, without "Pick a drive above" once a drive is picked."""
+        text = self.note_text
+        if self.current_drive() is not None:
+            if text.startswith("Pick a drive above, then "):
+                text = "Pick " + text[len("Pick a drive above, then "):]
+            else:
+                text = text.removeprefix("Pick a drive above.").strip()
+        self.note.setText(text)
+
     def on_drive(self):
         d = self.current_drive()
         self.action_note.setText("")
+        self.show_note()
         self.update_actions()
         if d is None:
             return
@@ -255,5 +267,6 @@ class DrivePanel(QWidget):
         self.drive_list.blockSignals(False)
         self.health.setText(other.health.text())
         self.action_note.setText("")
+        self.show_note()
         self.update_actions()
         self.set_folder(other.folder, "Press Start." if other.folder else "")

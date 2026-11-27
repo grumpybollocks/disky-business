@@ -228,6 +228,20 @@ class InTheWindow(unittest.TestCase):
         self.assertIn("FAILING", tab.health.text())
         self.assertFalse(tab.go.isEnabled())
 
+    def test_the_pick_a_drive_hint_goes_once_a_drive_is_picked(self):
+        found = dr.parse(ANSWER)
+        win = self.open(found).window()
+        pages = [p for p in win.pages if "Pick a drive above" in p.NOTE]
+        self.assertGreaterEqual(len(pages), 4)
+        for page in pages:
+            self.assertIn("Pick a drive above", page.panel.note.text(), page.title)
+        win.pages[0].drive_list.setCurrentRow(2)
+        for page in pages:                                      # every tab shows the same drive
+            page.panel.adopt(win.pages[0].panel)
+            self.assertNotIn("Pick a drive above", page.panel.note.text(), page.title)
+        care = [p for p in pages if "partition" in p.NOTE][0]
+        self.assertEqual(care.panel.note.text(), "Pick a partition on the right.")
+
     def mounted(self):
         folder = tempfile.mkdtemp()
         self.addCleanup(os.rmdir, folder)

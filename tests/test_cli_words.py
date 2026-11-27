@@ -45,6 +45,10 @@ class Words(unittest.TestCase):
                            "message": "No problems found."}))
         self.assertIn("Self-test (short): Passed", say({"event": "selftest_result", "kind": "short", "status": "s",
                                                         "ok": True, "message": "Passed"}))
+        for kind in ("frag_files", "frag_summary"):             # an empty folder is not "0 of 0 files"
+            empty = say({"event": kind, "files": 0, "fragmented_files": 0, "pieces": 0, "file_bytes": 0,
+                         "fragmented_bytes": 0, "skipped": 0, "worst": []})
+            self.assertEqual(empty.strip(), "No files with data here to scan.", kind)
         deep = say({"event": "smart_deep", "device": "sdz", "data": {
             "model_name": "EXAMPLE", "maker": "Example Ltd", "smart_status": {"passed": True},
             "power_on_time": {"hours": 12}, "ata_smart_error_log": {"extended": {"count": 3}}}})
