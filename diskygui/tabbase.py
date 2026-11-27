@@ -28,6 +28,7 @@ class TabBase(QWidget):
         self.problems_seen = []
         self.runner.problem.connect(self.problems_seen.append)
         self.mode = None                                # None when idle, else the name of the job
+        self.continuing = False                         # set by a tab whose job goes on with another engine run
         self.error = None
         self.swatches = []                              # (label widget, colour key) of the legend
         self.confirm = lambda text: QMessageBox.question(self, "Disky Business", text) == QMessageBox.Yes
@@ -97,8 +98,9 @@ class TabBase(QWidget):
                     label.setText(self.error)
                     break
         finally:
-            if self.mode is not None:
+            if self.mode is not None and not self.continuing:
                 self.set_busy(None)
+            self.continuing = False
 
     def password_words(self):
         """What a question says about the password: asked once per session, or not at all any more."""

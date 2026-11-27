@@ -6,6 +6,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLay
 from disky import trim
 
 from .defragtab import admin_wrap
+from .drives import NTFS
 from .tabbase import TabBase
 
 ABOUT = ("TRIM tells an SSD which space is free, so it can prepare it for new data and stay fast. It never "
@@ -44,16 +45,20 @@ class TrimTab(TabBase):
         self.status = QLabel("")
         self.status.setObjectName("status")
         self.status.setWordWrap(True)
-        self.go = QPushButton("Trim now")
+        self.go = QPushButton("Trim this drive")
+        self.go.setToolTip("Tell the SSD which space is free. Files are not touched")
         self.go.clicked.connect(self.start)
+        self.targets = []                               # the mounted file systems of the picked drive to trim
+        self.queue = []
+        self.trimmed = 0
         bottom = QHBoxLayout()
         bottom.addWidget(self.status, 1)
         bottom.addWidget(self.go)
         right = QVBoxLayout()
         right.addWidget(about)
         right.addWidget(box)
+        right.addLayout(bottom)                         # the button right under the answer, not at the far bottom
         right.addStretch(1)
-        right.addLayout(bottom)
         self.extend(right)
         self.assemble(right)
         self.update_buttons()
@@ -63,41 +68,57 @@ class TrimTab(TabBase):
 
     def on_folder(self, folder, hint):
         if self.mode is None:
-            self.facts = self.info_of(folder) if folder else None
             self.hint = "" if folder else hint
+            self.find_targets(folder)
             self.status.setText("")
             self.show_facts()
         self.update_buttons()
 
+    def find_targets(self, folder):
+        """What "Trim this drive" would trim: every mounted file system of the picked drive that accepts TRIM.
+        No folder is needed. Windows (NTFS) partitions are left alone. Without a picked drive, the folder
+        chosen by hand counts."""
+        d = self.panel.current_drive()
+        places = [v.mounts[0] for v in d.volumes if v.mounts and v.fstype not in NTFS] if d else []
+        if not places and folder and d is None:
+            places = [folder]
+        facts = [self.info_of(place) for place in places]
+        self.targets = [place for place, f in zip(places, facts) if f and f["supported"]]
+        self.facts = next((f for f in facts if f and f["supported"]), facts[0] if facts else None)
+        self.unmounted = bool(d and not places)
+
     def show_facts(self):
         f = self.facts
-        if not f and self.panel.current_drive() is not None:
-            self.answer.setText("Nothing to trim on this drive here.")
-            self.detail.setText(getattr(self, "hint", "") or "Disky has no folder on it to work from.")
+        if getattr(self, "unmounted", False):
+            self.answer.setText("Mount this drive first.")
+            self.detail.setText("TRIM works through a mounted file system. Press Mount, on the left, then look "
+                                "here again.")
         elif not f:
             self.answer.setText("Choose a drive.")
             self.detail.setText("")
         elif f["supported"]:
             self.answer.setText("This drive accepts TRIM.")
-            self.detail.setText(f"Mounted at {f['mount']}. It takes up to {size_text(f['discard_max_bytes'])} "
-                                "at a time. Trimming asks for the admin password.")
+            where = ", ".join(self.targets)
+            self.detail.setText(f"\"Trim this drive\" tells it which space is free ({where}). Files are not "
+                                "touched. It needs admin rights.")
         else:
             self.answer.setText("This drive does not accept TRIM.")
             self.detail.setText("Spinning disks have no use for it. Many USB cases do not pass it on to the SSD "
                                 "inside, so it cannot be done through them. Nothing is offered.")
 
     def update_buttons(self):
-        self.go.setEnabled(self.mode is None and bool(self.facts and self.facts["supported"]))
+        self.go.setEnabled(self.mode is None and bool(self.targets))
         self.panel.set_busy(self.mode is not None)
 
     def start(self):
-        if self.mode is None and self.facts and self.facts["supported"] and self.confirm(
-                f"Run TRIM on {self.facts['mount']}?\nIt tells the drive which space is free; files are not "
+        if self.mode is None and self.targets and self.confirm(
+                f"Run TRIM on {', '.join(self.targets)}?\nIt tells the drive which space is free; files are not "
                 "touched. " + self.password_words()):
             self.error = self.result = None
+            self.queue, self.trimmed = list(self.targets), 0
             self.status.setText("Trimming...")
             self.set_busy("trim")
-            self.runner.start("trim", self.folder, wrap=self.wrap())
+            self.runner.start("trim", self.queue.pop(0), wrap=self.wrap())
 
     def on_event(self, ev):
         kind = ev.get("event")
@@ -115,8 +136,14 @@ class TrimTab(TabBase):
             self.status.setText("Not trimmed: the admin password was not given.")
         elif self.result:
             got = self.result.get("trimmed_bytes")
-            self.status.setText("Done: " + (f"{size_text(got)} of free space trimmed." if got is not None
-                                            else self.result.get("message", "")))
+            self.trimmed += got or 0
+            if self.queue:                              # the drive's next file system, in the same session
+                self.result = None
+                self.continuing = True                  # still the same job: the tab stays busy
+                self.runner.start("trim", self.queue.pop(0), wrap=self.wrap())
+                return
+            self.status.setText("Done: " + (f"{size_text(self.trimmed)} of free space trimmed."
+                                            if got is not None else self.result.get("message", "")))
         else:
             self.status.setText(f"Ended without a result (exit {code}).")
         self.set_busy(None)
