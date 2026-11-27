@@ -100,16 +100,23 @@ class Defrag(unittest.TestCase):
             os.unlink(path)
 
     @unittest.skipUnless(CAN_DEFRAG, f"no defragmenter for {FS} here")
-    def test_a_file_another_program_writes_meanwhile_is_left_alone_not_blamed_on_the_tool(self):
+    def test_any_change_stops_but_the_message_says_what_most_likely_did_it(self):
         def busy_program(cmd, **kw):     # e.g. a browser writing its database while the tool works
             with open(cmd[-1], "ab") as f:
                 f.write(b"new data")
             return subprocess.CompletedProcess(cmd, 0, "", "")
-        with Folder() as d:
-            path = fragmented(d)
-            with self.assertRaises(frag.InUse):
-                frag.defrag_file(path, run=busy_program)
-            os.unlink(path)
+
+        def shrinking_tool(cmd, **kw):   # a broken tool that cuts the file: size and time change too
+            os.truncate(cmd[-1], 4096)
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        for tool in (busy_program, shrinking_tool):
+            with self.subTest(tool.__name__), Folder() as d:
+                path = fragmented(d)
+                with self.assertRaises(RuntimeError) as e:          # never a skip: the run ends here
+                    frag.defrag_file(path, run=tool)
+                self.assertIn("another program", str(e.exception))
+                self.assertIn("Nothing more was touched", str(e.exception))
+                os.unlink(path)
 
     def test_a_file_shared_with_a_snapshot_is_never_defragmented(self):
         ran = []
@@ -190,29 +197,26 @@ class DefragAll(unittest.TestCase):
         r = frag.defrag_all("/d", seen.append, scan=lambda f, worst, stop: self.files(4), one=one)
         self.assertEqual(order, ["/d/f0", "/d/f1", "/d/f2", "/d/f3"])
         self.assertEqual(r, {"files": 4, "done": 3, "improved": 2, "skipped": 1, "pieces_before": 90,
-                             "pieces_after": 32, "stopped": False, "shared": 0, "in_use": 0})
+                             "pieces_after": 32, "stopped": False, "shared": 0})
         self.assertEqual([(e["index"], e["total"], e["skipped"]) for e in seen],
                          [(1, 4, False), (2, 4, True), (3, 4, False), (4, 4, False)])
         from disky import contract
         self.assertEqual([p for e in seen for p in contract.problems(e)], [])
 
-    def test_shared_files_never_reach_the_tool_and_in_use_files_are_counted_apart(self):
+    def test_shared_files_never_reach_the_tool(self):
         found = {"worst": [{"pieces": 9, "bytes": 1, "path": "/d/snap", "shared": True},
-                           {"pieces": 8, "bytes": 1, "path": "/d/busy", "shared": False},
                            {"pieces": 7, "bytes": 1, "path": "/d/odd", "shared": False},
                            {"pieces": 6, "bytes": 1, "path": "/d/ok", "shared": False}]}
         order = []
 
         def one(path, stop=None):
             order.append(path)
-            if path == "/d/busy":
-                raise frag.InUse("changed meanwhile")
             if path == "/d/odd":
                 raise frag.NotSupported("no")
             return {"before": 6, "after": 1, "ended": ""}
         r = frag.defrag_all("/d", lambda e: None, scan=lambda f, worst, stop: found, one=one)
-        self.assertEqual(order, ["/d/busy", "/d/odd", "/d/ok"])           # the shared file is never touched
-        self.assertEqual((r["files"], r["done"], r["shared"], r["in_use"], r["skipped"]), (3, 1, 1, 1, 1))
+        self.assertEqual(order, ["/d/odd", "/d/ok"])                      # the shared file is never touched
+        self.assertEqual((r["files"], r["done"], r["shared"], r["skipped"]), (2, 1, 1, 1))
 
     def test_stop_ends_it_after_the_file_in_hand(self):
         import threading

@@ -65,14 +65,14 @@ Other exits: 3 for an `error` event.
 
 `disky defragall <folder>`: every fragmented file under the folder, the most fragmented first, each with the
 system's own tool and each checked afterwards to be unchanged. Stop ends it after the file in hand (exit 130).
-A file the tool cannot handle is skipped. A fragmented file that shares its data with a snapshot or a copy (btrfs snapshots, reflink copies) is never given to the tool: defragmenting unshares it and stores it a second time. A file another program changes meanwhile (its size or time changed) is left as it is and counted as `in_use`. A file whose content changed while its size and time did not is an `error` `content_changed` and ends the run.
+A file the tool cannot handle is skipped. A fragmented file that shares its data with a snapshot or a copy (btrfs snapshots, reflink copies) is never given to the tool: defragmenting unshares it and stores it a second time. A file whose content changed is an `error` `content_changed` and ends the run, nothing more touched; the message says whether its size or time changed too (most likely another program writing to it) or not (the tool).
 
 `frag_files` also gives `shared_files` and `shared_bytes` (of the fragmented files, those shared with a snapshot or a copy), and each `worst` entry has `shared` (true/false). Piece counts join compressed extents that lie one after another (btrfs `compress=`), which the kernel reports with their uncompressed length.
 
 | Event | Fields | Meaning |
 |---|---|---|
 | `defrag_progress` | `index`, `total`, `path`, `before`, `after`, `skipped` | One file done: its pieces before and after |
-| `defragall_result` | `files`, `done`, `improved`, `skipped`, `pieces_before`, `pieces_after`, `stopped` | The totals. Also `shared` (fragmented files shared with a snapshot or a copy: never given to the tool, which would store them a second time) and `in_use` (changed by another program meanwhile); `skipped` counts only what the tool could not do |
+| `defragall_result` | `files`, `done`, `improved`, `skipped`, `pieces_before`, `pieces_after`, `stopped` | The totals. Also `shared` (fragmented files shared with a snapshot or a copy: never given to the tool, which would store them a second time); `skipped` counts only what the tool could not do |
 
 ## SMART through smartctl (added 2026-11-26, still contract version 1)
 

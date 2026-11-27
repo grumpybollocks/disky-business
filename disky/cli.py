@@ -98,7 +98,6 @@ class Printer:
             self._say(f"Defragmented {ev['done']} of {ev['files']} files: {ev['pieces_before']} pieces before, "
                       f"{ev['pieces_after']} after; content checked unchanged."
                       + (f" Left alone: {ev['shared']} shared with a snapshot or a copy." if ev.get("shared") else "")
-                      + (f" {ev['in_use']} changed by another program meanwhile." if ev.get("in_use") else "")
                       + (f" {ev['skipped']} the tool could not do." if ev["skipped"] else "")
                       + (" Stopped." if ev["stopped"] else ""))
         elif kind == "frag_summary":

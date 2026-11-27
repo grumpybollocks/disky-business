@@ -264,8 +264,6 @@ class DefragTab(TabBase):
             if r.get("shared"):
                 text += (f" {r['shared']} share their data with a snapshot or a copy and were left as they were "
                          "(defragmenting them would store them twice).")
-            if r.get("in_use"):
-                text += f" {r['in_use']} were changed by another program meanwhile and were left as they were."
             if other > 0:
                 text += f" {other} could not be defragmented by the system's tool and were left as they were."
             self.status.setText(text + " Scan again to see the drive as it is now.")

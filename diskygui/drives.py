@@ -100,8 +100,15 @@ class Drive:
 
     def kind_text(self):
         if self.kind == "stick":
-            return "USB stick" if self.usb else "Memory card"
+            return "USB stick"
+        if self.kind == "card":
+            return "Memory card"
         return ("USB " if self.usb else "") + self.kind
+
+    @property
+    def flash(self):
+        """A USB stick or a memory card: they keep no SMART record."""
+        return self.kind in ("stick", "card")
 
     def target(self, home=None, writable=None, mounted_ro=None):
         """Where a test of this drive would write: (folder, "") or (None, reason in plain words)."""
@@ -184,8 +191,9 @@ def parse(answer):
         nvme = (_P + "NVMe.Controller") in ifaces
         rpm = d.get("RotationRate") or 0            # -1 = spinning, speed unknown; 0 = not spinning
         media = {d.get("Media") or ""} | set(d.get("MediaCompatibility") or [])
-        stick = bool(media & _FLASH_MEDIA)          # the service names the media: no rotation guess needed
-        kind = "NVMe" if nvme else "stick" if stick else "SSD" if rpm == 0 else "HDD"
+        # The service names the media, so sticks and cards need no guess from the rotation rate.
+        flash = "stick" if "thumb" in media else "card" if media & _FLASH_MEDIA else ""
+        kind = "NVMe" if nvme else flash or ("SSD" if rpm == 0 else "HDD")
         smart = "nvme" if nvme else "ata" if (_P + "Drive.Ata") in ifaces else ""
         drives[path] = Drive((d.get("Model") or "Drive").strip(), int(d.get("Size") or 0), kind,
                              d.get("ConnectionBus") == "usb", _health(ifaces), path=path, smart=smart,

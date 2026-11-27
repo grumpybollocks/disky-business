@@ -128,7 +128,10 @@ class Reader(unittest.TestCase):
                    [193, "load-cycle-count", 50, 1, 1, 0, 366_830, 1, {}],             # score 1 of 100
                    [194, "temperature-celsius-2", 34, 34, 51, 0, 307_150, 4, {}],
                    [241, "total-lbas-written", 0, 100, 253, 0, 2_037_772_822_901, 7, {}]]  # "MB": 2 EB, wrong
-        rows, _ = smart.read(drive(), run=answer(seagate), names_of=lambda *d: {})
+        st = Drive("ST2000DM008-2UB102", 2_000_398_934_016, "HDD", False, Health(), path="/x", smart="ata")
+        rows, _ = smart.read(st, run=answer(seagate), names_of=lambda *d: {})
+        other, _ = smart.read(drive(), run=answer(seagate), names_of=lambda *d: {})     # not a Seagate model
+        self.assertEqual({x.name: x.value for x in other}["Commands that timed out"], "4 296 933 408")
         r = {x.name: x for x in rows}
         self.assertEqual((r["Commands that timed out"].value, r["Commands that timed out"].status), ("32", "OK"))
         self.assertIn("three counts here: 32, 30, 1", r["Commands that timed out"].about)

@@ -57,10 +57,13 @@ def errors_of(js):
     return [m.get("string", "") for m in msgs if isinstance(m, dict) and m.get("severity") == "error"]
 
 
-def on_usb(device, sys_block="/sys/block"):
-    """True when the drive is connected through USB (its place in the system's device tree passes a USB port)."""
+def on_usb(device, sys_block="/sys/class/block"):
+    """True when the drive is connected through USB (its place in the system's device tree passes a USB port).
+    Takes a drive or a partition, by name or by any /dev path (links such as /dev/disk/by-path are followed)."""
     try:
-        return "/usb" in os.path.realpath(os.path.join(sys_block, os.path.basename(device)))
+        name = os.path.basename(os.path.realpath(device) if device.startswith("/") else device)
+        node = os.path.join(sys_block, name)
+        return os.path.exists(node) and "/usb" in os.path.realpath(node)
     except (OSError, ValueError):
         return False
 

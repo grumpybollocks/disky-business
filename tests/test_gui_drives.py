@@ -89,7 +89,7 @@ class Parse(unittest.TestCase):
         card[P + "Drive"].update({"Media": v("flash_sd"), "MediaCompatibility": v(["flash_sd"])})
         found = {x.model: x for x in dr.parse({"data": [{D + "stick": stick, D + "card": card}]})}
         self.assertEqual(found["DataTraveler 3.0"].kind_text(), "USB stick")
-        self.assertEqual(found["SD Card Reader"].kind_text(), "USB stick")
+        self.assertEqual(found["SD Card Reader"].kind_text(), "Memory card")
         self.assertEqual(found["DataTraveler 3.0"].label, "62 GB  USB stick\nDataTraveler 3.0")
         self.assertFalse(found["DataTraveler 3.0"].spinning)
 

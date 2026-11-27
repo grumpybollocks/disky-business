@@ -35,10 +35,6 @@ class Shared(NotSupported):
     """Part of the file is shared with a snapshot or a copy; defragmenting would store that part twice."""
 
 
-class InUse(NotSupported):
-    """Another program changed the file while it was being defragmented: not the tool's doing, left as it is."""
-
-
 def _same_device(path, device):
     """A real folder (not a link) on `device`; False when it vanished or cannot be read meanwhile."""
     try:
@@ -145,8 +141,13 @@ def defrag_file(path, run=proc.run, timeout=3600, stop=None):
     _drop_cache(path)                   # flushes this file only, then the "after" check reads it from the drive
     after = pieces(extents(path))
     if sha256(path) != digest:
-        if _stamp(path) != stamp:       # written by another program (size or time changed): not the tool
-            raise InUse(f"{path} was changed by another program meanwhile, so it was left as it is.")
+        # Either way nothing more is touched. Size or time changed too: most likely another program wrote to
+        # it (a browser, a database); both unchanged: only the tool can have done it.
+        if _stamp(path) != stamp:
+            raise RuntimeError(f"The content of {path} changed while it was being defragmented, and so did its "
+                               "size or time: most likely another program was writing to it (a browser or a "
+                               "database, for example). Nothing more was touched. Close the programs that use "
+                               "files here, then run it again.")
         raise RuntimeError(f"The content of {path} changed during defragmenting. Stop using {tool[0]} on this drive.")
     return {"fs": kind, "tool": tool[0], "exit": done.returncode, "before": before, "after": after,
             "ended": getattr(done, "ended", ""),
@@ -207,14 +208,14 @@ def defrag_all(folder, emit, stop=None, scan=None, one=None):
     Emits `defrag_progress` after each file and returns the totals. Stop ends it after the file in hand (the
     tool itself is also told to stop). Files are counted apart: `skipped` (the tool cannot handle it),
     `shared` (shared with a snapshot or a copy: never given to the tool, because it would store it a second
-    time) and `in_use` (another program changed it meanwhile). `files` counts the files that were tried. If a file's
+    time). `files` counts the files that were tried. If a file's
     content changed under the tool, RuntimeError goes up at once: nothing more is touched.
     """
     scan, one = scan or scan_folder, one or defrag_file
     everything = scan(folder, worst=10**9, stop=stop)["worst"]
     found = [w for w in everything if not w.get("shared")]    # never handed to the tool: it would unshare them
     out = {"files": len(found), "done": 0, "improved": 0, "skipped": 0, "pieces_before": 0, "pieces_after": 0,
-           "stopped": False, "shared": len(everything) - len(found), "in_use": 0}
+           "stopped": False, "shared": len(everything) - len(found)}
     for i, item in enumerate(found):
         if stop is not None and stop.is_set():
             out["stopped"] = True
@@ -222,8 +223,7 @@ def defrag_all(folder, emit, stop=None, scan=None, one=None):
         try:
             r = one(item["path"], stop=stop)
         except (NotSupported, OSError) as e:
-            key = "shared" if isinstance(e, Shared) else "in_use" if isinstance(e, InUse) else "skipped"
-            out[key] += 1
+            out["shared" if isinstance(e, Shared) else "skipped"] += 1
             emit({"event": "defrag_progress", "index": i + 1, "total": len(found), "path": item["path"],
                   "before": item["pieces"], "after": item["pieces"], "skipped": True})
             continue

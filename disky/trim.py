@@ -22,17 +22,18 @@ def mount_of(path, mountinfo="/proc/self/mountinfo"):
 def auto_discard(point, mountinfo="/proc/self/mountinfo"):
     """True when the file system mounted at `point` already trims by itself as files are deleted (mounted with
     the `discard` option, e.g. btrfs `discard=async`)."""
+    found = False
     try:
         with open(mountinfo) as f:
-            for line in f:
+            for line in f:                          # the last mount at a point is the one in use (over-mounts)
                 left, _, right = line.partition(" - ")
                 fields = left.split()
                 if len(fields) > 5 and mounts.unescape(fields[4]) == point:
                     opts = fields[5].split(",") + (right.split()[2].split(",") if len(right.split()) > 2 else [])
-                    return any(o == "discard" or o.startswith("discard=") for o in opts)
+                    found = any(o == "discard" or o.startswith("discard=") for o in opts)
     except OSError:
         pass
-    return False
+    return found
 
 
 def _read(path):
