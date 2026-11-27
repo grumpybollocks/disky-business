@@ -83,7 +83,7 @@ class Parse(unittest.TestCase):
     def test_a_usb_stick_is_called_a_stick_not_a_hard_disk(self):
         # Real answer for a USB stick (2026-11-27): RotationRate -1 like a spinning disk of
         # unknown speed, but Media "thumb". Card readers give flash_sd and the like.
-        stick = drive("EXAMPLE STICK", 61_904_781_312, rpm=-1, bus="usb")
+        stick = drive("EXAMPLE STICK", 62_000_000_000, rpm=-1, bus="usb")
         stick[P + "Drive"].update({"Media": v("thumb"), "MediaCompatibility": v(["thumb"])})
         card = drive("SD Card Reader", 31_914_983_424, rpm=-1, bus="usb")
         card[P + "Drive"].update({"Media": v("flash_sd"), "MediaCompatibility": v(["flash_sd"])})

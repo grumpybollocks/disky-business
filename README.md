@@ -46,12 +46,27 @@ Five looks: Modern light and Modern dark (following your system), Windows 98 sty
 | Internal NVMe | TRIM through the window: 140 GiB trimmed |
 | 7 internal drives | SMART read and explained; item names match `smartctl` |
 | SATA SSD, SATA hard disk, NVMe, two drives in USB cases | Deep scan read by `disky smart --deep`; one drive's three logged errors shown |
+| 10 drives (3 NVMe, 4 internal SATA, 3 on USB) | Deep scan through the window, one password for all ten; each saved report keeps the serial number out until it is ticked |
 | btrfs home (zstd compression, Timeshift snapshots) | 56 031 files scanned in 3 s; 1 262 snapshot-shared files left alone (25.9 GiB not stored twice); a fragmented file defragmented from 64 pieces to 1, content unchanged |
 | Real test files damaged on purpose (2.1 GiB) | A flipped bit, a zeroed sector, data from another place (fake capacity), a missing file, a short file and a torn file: each found, with its place |
 | SATA SSD, speed test twice | 382 MiB/s write and 522 MiB/s read both times |
 | NVMe, 3 SATA SSDs, a 2 TB hard disk, a USB stick | All listed (NVMe too) and SMART explained; a hard disk's worn head parking (score 1) flagged; its packed timeout count shown as 32, not 4 296 933 408 |
 
 Test files are read correctly by `f3read` 8.0, and `f3write` 8.0's files by Disky Business.
+
+## Latest changes (27 November 2026)
+
+- **Deep scan**: a drive's identity, firmware, past errors, self-test history and lifetime statistics in their
+  own window, with a text report. The serial number stays hidden until you ask for it.
+- **NVMe drives** that udisks reports with no size are listed again.
+- **Defragmenting on btrfs** leaves snapshot-shared files alone, stops at once if a file changes under it, and
+  counts compressed files correctly.
+- **SMART explained better**: Seagate's packed counts decoded, worn head parking flagged, air temperature named
+  apart, and a hint when a drive in a USB case needs admin rights.
+- **Clearer words**: a progress bar, advice when a drive is bad, "Stopping..." while Stop works, a warning when
+  the speed test runs on the system drive, and plain words for every command-line result.
+- **Steadier**: background drive reads can no longer bring the window down; a short last test file is reported
+  instead of stopping the check.
 
 ## Run it
 
@@ -64,8 +79,9 @@ python3 -m diskygui                     # the window
 pip install '.[gui]'                    # or install it: gives `disky-business` and `disky`
 ```
 
-The engine also runs on its own: `disky test|verify|clean|speed|fragfiles|defrag|fragscan|trim <target>`
-(`--json` gives one line per event; see [docs/CONTRACT.md](docs/CONTRACT.md)).
+The engine also runs on its own: `disky test|write|verify|clean|speed|fragfiles|defrag|defragall|fragscan|trim|
+smart|selftest|fscheck|fsrepair <target>`. Every result is said in plain words; `--json` gives one line per
+event instead (see [docs/CONTRACT.md](docs/CONTRACT.md)). `disky smart <drive> --deep` is the Deep scan.
 
 ## More
 

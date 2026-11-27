@@ -128,7 +128,7 @@ class Reader(unittest.TestCase):
                    [193, "load-cycle-count", 50, 1, 1, 0, 366_830, 1, {}],             # score 1 of 100
                    [194, "temperature-celsius-2", 34, 34, 51, 0, 307_150, 4, {}],
                    [241, "total-lbas-written", 0, 100, 253, 0, 2_037_772_822_901, 7, {}]]  # "MB": 2 EB, wrong
-        st = Drive("ST1000EX001-0EX000", 2_000_398_934_016, "HDD", False, Health(), path="/x", smart="ata")
+        st = Drive("ST1000EX001-0EX000", 2_000_000_000_000, "HDD", False, Health(), path="/x", smart="ata")
         rows, _ = smart.read(st, run=answer(seagate), names_of=lambda *d: {})
         other, _ = smart.read(drive(), run=answer(seagate), names_of=lambda *d: {})     # not a Seagate model
         self.assertEqual({x.name: x.value for x in other}["Commands that timed out"], "4 296 933 408")
@@ -145,7 +145,7 @@ class Reader(unittest.TestCase):
         self.assertEqual(r["Raw read error rate"].status, "OK")
 
     def test_a_stick_is_told_it_keeps_no_record_not_blamed_on_a_case(self):
-        stick = Drive("EXAMPLE STICK", 61_904_781_312, "stick", True, Health(), path="/x", smart="")
+        stick = Drive("EXAMPLE STICK", 62_000_000_000, "stick", True, Health(), path="/x", smart="")
         case = Drive("USB SSD", 120_040_980_480, "SSD", True, Health(), path="/y", smart="")
         self.assertEqual(smart.read(stick, run=lambda *a, **k: self.fail("nothing to ask")), ([], smart.NO_SMART_STICK))
         self.assertEqual(smart.read(case, run=lambda *a, **k: self.fail("nothing to ask")), ([], smart.NO_SMART))
