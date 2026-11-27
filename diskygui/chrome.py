@@ -134,6 +134,9 @@ QHeaderView::section {{ background: {t.face}; color: {t.muted}; border: none; bo
 #heading {{ font-weight: bold; color: {t.muted}; }}
 #status {{ font-size: {px + 1}px; font-weight: bold; }}
 #verdict_title {{ font-size: {px + 6}px; font-weight: bold; }}
+QProgressBar {{ background: {t.border}; border: none; border-radius: 6px; }}
+QProgressBar::chunk {{ background: {t.title}; border-radius: 6px; }}
+#progressnote {{ color: {t.muted}; }}
 QCheckBox {{ spacing: 8px; }}
 QCheckBox::indicator {{ width: 16px; height: 16px; border: 1px solid {t.muted}; border-radius: 4px;
                        background: {t.field}; }}
@@ -186,6 +189,8 @@ QListWidget::item {{ padding: 2px; }}
 QListWidget::item:selected {{ background: {t.title}; color: {t.title_text}; }}
 #mapframe {{ background: {t.map_bg}; border: 2px solid transparent; border-image: url({well}) 2 2 2 2 stretch; }}
 #tipline, #health {{ border: 1px solid transparent; border-image: url({sunk}) 1 1 1 1 stretch; padding: 3px 6px; }}
+QProgressBar {{ background: {t.field}; border: 2px solid transparent; border-image: url({field}) 2 2 2 2 stretch; }}
+QProgressBar::chunk {{ background: {t.title}; width: 9px; margin: 1px; }}
 #themebutton {{ margin-bottom: 3px; }}
 #heading {{ font-weight: {bold}; }}
 #status {{ font-size: {px + 2}px; font-weight: bold; }}

@@ -10,7 +10,7 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QFrame, QHBoxLayout
 
 from . import smart
 from .defragtab import admin_wrap
-from .tabbase import TabBase
+from .tabbase import ProgressLine, TabBase
 
 ABOUT = ("SMART is the drive's own record of its health: errors, wear, hours and temperature. Reading it changes "
          "nothing on the drive. Score is the drive's own mark for an item (higher is better); the item fails "
@@ -94,13 +94,19 @@ class SmartTab(TabBase):
         self.stop_button.clicked.connect(self.stop_test)
         self.test_status = QLabel("")
         self.test_status.setObjectName("status")
+        self.test_status.setWordWrap(True)
+        self.test_progress = ProgressLine()             # shown while a self-test runs
+        self.test_progress.hide()
         self.test_result = None
         self.usb_button = QPushButton("Read with admin password")
         self.usb_button.setToolTip("For drives in USB cases: reads the SMART record with smartctl. Only reads")
         self.usb_button.clicked.connect(self.read_with_password)
         bottom = QHBoxLayout()
         bottom.addWidget(self.show_all)
-        bottom.addWidget(self.test_status, 1)
+        words = QVBoxLayout()
+        words.addWidget(self.test_status)
+        words.addWidget(self.test_progress)
+        bottom.addLayout(words, 1)
         for b in (self.short_button, self.long_button, self.stop_button):
             bottom.addWidget(b)
         bottom.addWidget(self.usb_button)
@@ -203,6 +209,7 @@ class SmartTab(TabBase):
                         "\"Stop self-test\" ends it early.\n\n" + self.password_words()):
             self.error = self.test_result = None
             self.test_status.setText(f"Starting the {kind} self-test...")
+            self.test_progress.show_progress(f"Starting the {kind} self-test", None, "", "")
             self.set_busy("selftest")
             self.runner.start("selftest", d.device, "--kind", kind, wrap=self.wrap())
 
@@ -214,6 +221,8 @@ class SmartTab(TabBase):
     def on_event(self, ev):
         if ev.get("event") == "selftest_progress":
             self.test_status.setText(f"Self-test running: {ev.get('percent', 0)} %")
+            self.test_progress.show_progress("Self-test running", ev.get("percent", 0),
+                                             "the drive is testing itself", "")
         elif ev.get("event") == "selftest_result":
             self.test_result = ev
         elif ev.get("event") == "smart_data":
@@ -258,6 +267,8 @@ class SmartTab(TabBase):
         self.short_button.setVisible(testable and self.mode != "selftest")
         self.long_button.setVisible(testable and self.mode != "selftest")
         self.stop_button.setVisible(self.mode == "selftest")
+        self.test_progress.setVisible(self.mode == "selftest")
+        self.test_status.setVisible(self.mode != "selftest")
         self.short_button.setEnabled(self.mode is None)
         self.long_button.setEnabled(self.mode is None)
         self.usb_button.setEnabled(self.mode is None)

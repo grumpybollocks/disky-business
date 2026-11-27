@@ -17,7 +17,7 @@ from .drives import fs_name
 from .mapmodel import BAD, GOOD, UNTOUCHED, WRITTEN, MapModel
 from .mapwidget import BlockMap
 from .adminsession import admin_wrap  # noqa: F401  (also imported from here by older code and tests)
-from .tabbase import TabBase
+from .tabbase import ProgressLine, TabBase
 
 LEGEND = (("free", "Free"), ("other", "Other data"), ("whole", "File in one piece"), ("fragmented", "File in pieces"))
 AS_STATE = {"free": "untouched", "other": "written", "whole": "good", "fragmented": "bad"}
@@ -76,8 +76,13 @@ class DefragTab(TabBase):
         buttons = QVBoxLayout()
         buttons.addWidget(self.scan_button)
         buttons.addWidget(self.defrag_button)
+        self.progress = ProgressLine()                  # shown while "Defragment all" works
+        self.progress.hide()
+        words = QVBoxLayout()
+        words.addWidget(self.status)
+        words.addWidget(self.progress)
         bottom = QHBoxLayout()
-        bottom.addWidget(self.status, 1)
+        bottom.addLayout(words, 1)
         bottom.addLayout(buttons)
 
         caption = QLabel("Drive layout: where the files lie (a scan only reads)")
@@ -130,6 +135,8 @@ class DefragTab(TabBase):
         return rows[0].row() if rows else -1
 
     def update_buttons(self):
+        self.progress.setVisible(self.mode == "defrag")
+        self.status.setVisible(self.mode != "defrag")
         fs = self.kind()
         busy = self.mode is not None
         self.scan_button.setText("Stop" if self.mode == "scan" else "Scan")
@@ -180,6 +187,7 @@ class DefragTab(TabBase):
                         f"tool?\n{self.folder}\n\nEach file's content is checked afterwards to be unchanged. "
                         "It can take long. Stop ends it after the file in hand."):
             self.result = None
+            self.progress.show_progress("Defragmenting", None, "looking for the fragmented files", "")
             self._begin("defrag", "Defragmenting...")
             self.runner.start("defragall", self.folder)
 
@@ -214,6 +222,9 @@ class DefragTab(TabBase):
         elif kind == "defrag_progress":
             name = os.path.basename(str(ev.get("path", "")))
             self.status.setText(f"Defragmenting {ev.get('index')} of {ev.get('total')}: {name}")
+            done, total = int(ev.get("index") or 0), int(ev.get("total") or 0)
+            self.progress.show_progress("Defragmenting", 100 * done / total if total else None,
+                                        f"file {done} of {total}", name)
             for w in self.worst:
                 if w.get("path") == ev.get("path"):
                     w["pieces"] = ev.get("after", w["pieces"])

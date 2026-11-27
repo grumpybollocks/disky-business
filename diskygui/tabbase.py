@@ -5,10 +5,56 @@ A new tab subclasses TabBase, sets `title` and `NOTE`, builds its right-hand sid
 fills in the hooks at the bottom. Put the class in window.MainWindow.TABS and it appears.
 """
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QVBoxLayout,
+                               QWidget)
 
 from .drivepanel import DrivePanel
 from .runner import EngineRunner
+
+
+class ProgressLine(QWidget):
+    """A running job, shown properly: what it is doing and how far, a bar, and two facts under it (for
+    example the speed and the time left)."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.title = QLabel("")
+        self.title.setObjectName("status")
+        self.percent = QLabel("")
+        self.percent.setObjectName("status")
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 100)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedHeight(12)
+        self.left, self.right = QLabel(""), QLabel("")
+        self.left.setObjectName("progressnote")
+        self.right.setObjectName("progressnote")
+        top, under = QHBoxLayout(), QHBoxLayout()
+        top.addWidget(self.title, 1)
+        top.addWidget(self.percent)
+        under.addWidget(self.left, 1)
+        under.addWidget(self.right)
+        col = QVBoxLayout(self)
+        col.setContentsMargins(0, 0, 0, 0)
+        col.setSpacing(4)
+        col.addLayout(top)
+        col.addWidget(self.bar)
+        col.addLayout(under)
+        col.addStretch(1)
+
+    def show_progress(self, title, percent=None, left="", right=""):
+        """percent None: how far is not known yet (the bar runs to and fro)."""
+        self.title.setText(title)
+        if percent is None:
+            self.bar.setRange(0, 0)
+            self.percent.setText("")
+        else:
+            value = max(0, min(100, int(percent)))
+            self.bar.setRange(0, 100)
+            self.bar.setValue(value)
+            self.percent.setText(f"{value} %")
+        self.left.setText(left)
+        self.right.setText(right)
 
 
 class TabBase(QWidget):
