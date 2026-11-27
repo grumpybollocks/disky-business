@@ -238,6 +238,20 @@ def _fragfiles(args, emit, stop):
     return 130 if stop.is_set() else 0
 
 
+def _defragall(args, emit, stop):
+    try:
+        r = frag.defrag_all(args.folder, emit, stop)
+    except frag.NotSupported as e:
+        emit({"event": "error", "code": "not_supported", "message": str(e)})
+        return 3
+    except RuntimeError as e:
+        emit({"event": "error", "code": "content_changed", "message": str(e)})
+        return 1
+    emit({"event": "defragall_result", **r})
+    emit({"event": "done", "stopped": r["stopped"]})
+    return 130 if r["stopped"] else 0
+
+
 def _smart(args, emit, stop):
     try:
         data = smartread.read(args.folder)
@@ -367,6 +381,8 @@ COMMANDS = {c.name: c for c in (
     Command("fragfiles", "read-only: how fragmented the files in a folder are (btrfs, ext4, XFS)", _fragfiles),
     Command("defrag", "defragment one file with the system's own tool (btrfs, ext4, XFS)", _defrag,
             target="any", target_help="the file"),
+    Command("defragall", "defragment every fragmented file in a folder with the system's own tool, content "
+            "checked after each (btrfs, ext4, XFS)", _defragall),
     Command("trim", "tell the drive which space is free (the system's fstrim; needs admin rights)", _trim),
     Command("helper", "the admin helper the window keeps for a session: runs trim, fragscan, smart, selftest, "
             "fscheck and fsrepair on request (see disky/helper.py)", _helper, target="any",

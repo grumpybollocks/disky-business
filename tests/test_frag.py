@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import unittest
+from unittest import mock
 from contextlib import redirect_stderr, redirect_stdout
 
 from disky import cli, contract, frag
@@ -127,6 +128,54 @@ class Defrag(unittest.TestCase):
             self.assertEqual((code, json.loads(out2.getvalue().splitlines()[-1])["event"]), (3, "error"))
             os.unlink(path)
 
+
+
+class DefragAll(unittest.TestCase):
+    def files(self, n):
+        return {"worst": [{"pieces": 10 * (n - i), "bytes": 1, "path": f"/d/f{i}"} for i in range(n)]}
+
+    def test_every_file_in_turn_with_totals(self):
+        seen, order = [], []
+
+        def one(path, stop=None):
+            order.append(path)
+            if path == "/d/f1":
+                raise frag.NotSupported("no")
+            return {"before": 30, "after": 30 if path == "/d/f2" else 1, "ended": ""}
+        r = frag.defrag_all("/d", seen.append, scan=lambda f, worst, stop: self.files(4), one=one)
+        self.assertEqual(order, ["/d/f0", "/d/f1", "/d/f2", "/d/f3"])
+        self.assertEqual(r, {"files": 4, "done": 3, "improved": 2, "skipped": 1, "pieces_before": 90,
+                             "pieces_after": 32, "stopped": False})
+        self.assertEqual([(e["index"], e["total"], e["skipped"]) for e in seen],
+                         [(1, 4, False), (2, 4, True), (3, 4, False), (4, 4, False)])
+        from disky import contract
+        self.assertEqual([p for e in seen for p in contract.problems(e)], [])
+
+    def test_stop_ends_it_after_the_file_in_hand(self):
+        import threading
+        stop, order = threading.Event(), []
+
+        def one(path, stop=None):
+            order.append(path)
+            stop.set()
+            return {"before": 5, "after": 1, "ended": ""}
+        r = frag.defrag_all("/d", lambda e: None, stop, scan=lambda f, worst, stop: self.files(5), one=one)
+        self.assertEqual((order, r["stopped"], r["done"]), (["/d/f0"], True, 1))
+
+    def test_a_changed_file_ends_everything_at_once(self):
+        order = []
+
+        def one(path, stop=None):
+            order.append(path)
+            raise RuntimeError("The content of /d/f0 changed")
+        with self.assertRaises(RuntimeError):
+            frag.defrag_all("/d", lambda e: None, scan=lambda f, worst, stop: self.files(3), one=one)
+        self.assertEqual(order, ["/d/f0"])                      # nothing more is touched
+
+    def test_ntfs_is_refused_before_anything(self):
+        with mock.patch.object(frag, "fs_type", lambda p: "ntfs3"):
+            with self.assertRaises(frag.NotSupported):
+                frag.defrag_all("/mnt/windows", lambda e: None, one=lambda *a, **k: self.fail("must not run"))
 
 if __name__ == "__main__":
     unittest.main()

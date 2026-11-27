@@ -28,6 +28,9 @@ EVENTS = {
     "trim_result": {"mount": STR, "trimmed_bytes": OPT_INT, "message": STR},
     "selftest_progress": {"status": STR, "percent": INT},
     "selftest_result": {"kind": STR, "status": STR, "ok": OPT_BOOL, "message": STR},
+    "defrag_progress": {"index": INT, "total": INT, "path": STR, "before": INT, "after": INT, "skipped": BOOL},
+    "defragall_result": {"files": INT, "done": INT, "improved": INT, "skipped": INT, "pieces_before": INT,
+                         "pieces_after": INT, "stopped": BOOL},
     "helper_ready": {},
     "helper_done": {"code": INT},
     "helper_closed": {"reason": STR},
@@ -41,7 +44,7 @@ EVENTS = {
 FRAG_STATES = {"free", "whole", "fragmented", "other"}
 SPEED_TESTS = {"seq_write", "seq_read", "rand_read", "rand_write"}
 PHASES = {"write", "verify"}
-MODES = {"test", "write", "verify", "clean", "speed", "fragscan", "defrag", "fragfiles", "trim", "fscheck", "fsrepair", "smart", "selftest", "helper"}
+MODES = {"test", "write", "verify", "clean", "speed", "fragscan", "defrag", "fragfiles", "trim", "fscheck", "fsrepair", "smart", "selftest", "helper", "defragall"}
 BLOCK_STATES = {"written", "good", "changed", "bad", "overwritten"}
 VERDICTS = {"good", "bad", "not_verified", "nothing_to_check", "stopped"}
 

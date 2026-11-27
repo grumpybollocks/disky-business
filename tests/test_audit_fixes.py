@@ -219,18 +219,6 @@ class Window(unittest.TestCase):
         self.wait(lambda: tab.mode is None)
         self.assertTrue(tab.window().tabs.tabBar().isEnabled())
 
-    def test_W5_defrag_says_when_the_tool_failed(self):
-        tab = self.window("Defrag", "toolfail")
-        tab.fs_type = lambda path: "ext4"
-        tab.set_folder("/a/folder")
-        tab.worst = [{"pieces": 64, "bytes": 8 << 20, "path": "/a/folder/big.bin"}]
-        tab._show_worst()
-        tab.files.setCurrentRow(0)
-        tab.confirm = lambda text: True
-        tab.defrag_selected()
-        self.wait(lambda: tab.mode is None)
-        self.assertIn("did not finish", tab.status.text())
-
     def test_W6_exfat_scan_asks_before_the_password_prompt(self):
         tab = self.window("Defrag", "good")
         tab.fs_type = lambda path: "exfat"

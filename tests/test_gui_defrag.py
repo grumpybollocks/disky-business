@@ -53,28 +53,62 @@ class DefragTabTests(unittest.TestCase):
         tab.scan_button.click()
         self.wait(lambda: tab.mode is None)
 
-    def test_linux_file_system_scan_then_defrag_one_file(self):
+    def test_linux_file_system_scan_then_defragment_all(self):
         tab = self.open("good", "btrfs")
         self.assertEqual(tab.scan_command(), ("fragfiles", "/a/folder", ()))        # no password asked
-        self.assertFalse(tab.defrag_button.isEnabled())
+        self.assertFalse(tab.defrag_button.isEnabled())                             # nothing scanned yet
         self.scan(tab)
         self.assertEqual(tab.status.text(), "2 of 10 files are in more than one piece (20.0 %), holding 8.0 MiB "
                                             "of 20.0 MiB. 1 could not be read.")
         self.assertEqual([tab.files.item(i).text() for i in range(2)],
                          ["64 pieces    8.0 MiB    /drive/big.bin", "3 pieces    4.0 KiB    /drive/small.txt"])
-        self.assertFalse(tab.defrag_button.isEnabled())                             # nothing selected yet
-        tab.files.setCurrentRow(0)
-        self.assertTrue(tab.defrag_button.isEnabled())
+        self.assertEqual((tab.defrag_button.text(), tab.defrag_button.isEnabled()), ("Defragment all", True))
         asked = []
         tab.confirm = lambda text: asked.append(text) or False
         tab.defrag_button.click()
         self.assertEqual((len(asked), tab.mode), (1, None))                         # "no" runs nothing
+        self.assertIn("all 2 fragmented files", asked[0])
+        self.assertIn("checked afterwards", asked[0])
         tab.confirm = lambda text: True
         tab.defrag_button.click()
         self.wait(lambda: tab.mode is None)
-        self.assertEqual(tab.runner.last_argv[-4:], ["defrag", "/drive/big.bin", "--json", "--stdin-stop"])
-        self.assertEqual(tab.status.text(), "64 pieces before, 1 after. Content checked: unchanged.")
+        self.assertEqual(tab.runner.last_argv[-4:], ["defragall", "/a/folder", "--json", "--stdin-stop"])
+        self.assertEqual(tab.status.text(),
+                         "Done: 1 of 2 files. 64 pieces before, 1 after. The content of every file was checked: "
+                         "unchanged. 1 could not be defragmented by the system's tool and were left as they were. "
+                         "Scan again to see the drive as it is now.")
         self.assertEqual(tab.files.item(0).text(), "1 pieces    8.0 MiB    /drive/big.bin")
+        self.assertFalse(tab.defrag_button.isEnabled())                             # until the next scan
+
+    def test_defragment_all_can_be_stopped_and_a_changed_file_is_said(self):
+        tab = self.open("slow", "ext4")
+        tab.fragmented = 2
+        tab.update_buttons()
+        tab.confirm = lambda text: True
+        tab.defrag_button.click()
+        self.wait(lambda: "1 of 2" in tab.status.text())
+        self.assertEqual((tab.defrag_button.text(), tab.defrag_button.isEnabled(), tab.scan_button.isEnabled()),
+                         ("Stop", True, False))
+        tab.defrag_button.click()
+        self.wait(lambda: tab.mode is None)
+        self.assertIn("Stopped after 1 of 2 files.", tab.status.text())
+        self.assertTrue(tab.defrag_button.isEnabled())                              # the rest can be done later
+        tab = self.open("toolfail", "ext4")
+        tab.fragmented = 2
+        tab.update_buttons()
+        tab.confirm = lambda text: True
+        tab.defrag_button.click()
+        self.wait(lambda: tab.mode is None)
+        self.assertIn("changed during defragmenting", tab.status.text())
+
+    def test_exfat_offers_no_defragment_all(self):
+        tab = self.open("good", "exfat")
+        tab.scan_command = lambda: ("fragscan", "/a/folder", ())
+        self.scan(tab)
+        self.assertEqual((tab.fragmented, tab.defrag_button.isEnabled()), (0, False))
+        tab.confirm = lambda text: True                 # even a "yes" must start nothing here
+        tab.defrag_or_stop()
+        self.assertIsNone(tab.mode)
 
     def test_exfat_scan_asks_for_admin_draws_the_map_and_offers_no_defrag(self):
         tab = self.open("good", "exfat")
@@ -87,9 +121,9 @@ class DefragTabTests(unittest.TestCase):
         self.scan(tab)
         self.assertIn("2 of 10 files", tab.status.text())
         self.assertIn("No defragmenter is offered for exFAT", tab.status.text())
-        tab.files.setCurrentRow(0)
         self.assertFalse(tab.defrag_button.isEnabled())
-        tab.defrag_selected()
+        tab.confirm = lambda text: True
+        tab.defrag_or_stop()
         self.assertIsNone(tab.mode)
         self.assertEqual(len(tab.model.states), 1000)
         self.assertEqual(tab.model.counts()["bad"], 1)                               # the fragmented cluster
