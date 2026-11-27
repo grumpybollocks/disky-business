@@ -60,7 +60,7 @@ class Window(unittest.TestCase):
         self.assertEqual(title, "Drive is good.")
         self.assertIn("200.0 MiB", detail)
         self.assertEqual(tab.model.counts()["good"], 200)
-        self.assertEqual((tab.go.text(), tab.go.isEnabled(), tab.problems_seen), ("Start", True, []))
+        self.assertEqual((tab.go.text(), tab.go.isEnabled(), tab.problems_seen), ("Start test", True, []))
 
     def test_bad_names_the_block_and_the_map_shows_it(self):
         tab = self.run_to_end("bad")
@@ -78,7 +78,7 @@ class Window(unittest.TestCase):
         tab = self.open("slow")
         tab.go.click()
         self.wait(lambda: "Writing" in tab.status.text() and "MiB/s" in tab.status.text())
-        self.assertEqual(tab.go.text(), "Stop")
+        self.assertEqual(tab.go.text(), "Stop test")
         self.assertFalse(tab.remove.isEnabled())
         tab.go.click()
         self.wait(lambda: tab.mode is None, 3.0)
@@ -95,13 +95,13 @@ class Window(unittest.TestCase):
     def test_engine_error_message_is_shown(self):
         title, detail = self.shown(self.run_to_end("refuse"))
         self.assertEqual(title, "Could not run.")
-        self.assertIn("Check existing files", detail)
+        self.assertIn("Check test files again", detail)
         self.assertNotIn("disky ", detail)             # no terminal commands in the window
 
     def test_check_existing_files_runs_a_verify(self):
         tab = self.open("bad")
         tab.check.click()
-        self.assertEqual(tab.go.text(), "Stop")
+        self.assertEqual(tab.go.text(), "Stop test")
         self.assertFalse(tab.check.isEnabled())
         self.wait(lambda: tab.mode is None)
         self.assertEqual(tab.runner.last_argv[-4:], ["verify", "/a/folder", "--json", "--stdin-stop"])
@@ -139,7 +139,7 @@ class Window(unittest.TestCase):
         tab.confirm = lambda text: True
         tab.remove.click()
         self.wait(lambda: tab.mode is None)
-        self.assertEqual(tab.status.text(), "Test files removed.")
+        self.assertEqual(tab.status.text(), "Test files deleted.")
 
     def test_remove_says_when_a_look_alike_file_was_kept(self):
         tab = self.open("kept")
@@ -234,6 +234,38 @@ class Window(unittest.TestCase):
         source = inspect.getsource(start.main)
         self.assertIn('setDesktopFileName("disky-business")', source)        # the menu entry's file name
         self.assertIn("setWindowIcon", source)
+
+    def test_the_tab_says_what_start_will_do_before_it_is_pressed(self):
+        import tempfile
+        from diskygui.window import test_plan
+
+        class Space:
+            f_bavail, f_frsize, f_blocks = 100_000, 1 << 20, 400_000      # 100 000 MiB free of 400 000 MiB
+        plain = test_plan("/x", statvfs=lambda p: Space, files=lambda p: [], system=lambda p: False)
+        self.assertIn("fills the free space here (105 GB)", plain)
+        self.assertIn("Your own files are not touched", plain)
+        self.assertNotIn("left free", plain)
+        system = test_plan("/x", statvfs=lambda p: Space, files=lambda p: [], system=lambda p: True)
+        self.assertIn("(84 GB)", system)                                # 5 % of the drive is kept
+        self.assertIn("Your system runs from this drive, so 21 GB is left free", system)
+        old = test_plan("/x", statvfs=lambda p: Space, files=lambda p: [(0, "a"), (1, "b")], system=lambda p: False)
+        self.assertIn("already holds 2 Disky test files", old)
+        self.assertNotIn("fills the free space", old)
+
+        class Full:
+            f_bavail, f_frsize, f_blocks = 0, 1 << 20, 400_000
+        self.assertEqual(test_plan("/x", statvfs=lambda p: Full, files=lambda p: [], system=lambda p: False),
+                         "There is no free space here to test.")
+        tab = self.open("good")
+        with tempfile.TemporaryDirectory() as folder:
+            tab.set_folder(folder)
+            self.assertIs(tab.stack.currentWidget(), tab.plan)          # shown as soon as a drive is picked
+            self.assertIn("\"Start test\" fills the free space here", tab.plan.text())
+            open(os.path.join(folder, "1.h2w"), "w").close()
+            tab.set_folder(folder)
+            self.assertIn("already holds 1 Disky test file from", tab.plan.text())
+        self.assertEqual((tab.go.text(), tab.check.text(), tab.remove.text()),
+                         ("Start test", "Check test files again", "Delete test files"))
 
 if __name__ == "__main__":
     unittest.main()

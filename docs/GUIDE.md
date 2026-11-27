@@ -7,7 +7,8 @@ right changes the colours.
 ## Test: can this drive be trusted?
 
 1. Pick the drive. If it says "Not mounted", press **Mount**.
-2. Press **Start**. The test fills the drive's free space with test files, then reads all of it back.
+2. Read the line under the map: it says how much will be written and what happens to your files. Press
+   **Start test**. The test fills the drive's free space with test files, then reads all of it back.
    Each square of the map is a part of the drive.
 3. Read the verdict.
 
@@ -15,7 +16,7 @@ right changes the colours.
 |---|---|
 | **Drive is good.** | Everything written came back from the drive, unchanged |
 | **Drive is bad** | Some blocks came back wrong or not at all. Do not trust the drive. A stick that claims more space than it has ends here |
-| **Not verified.** | The data matched, but the computer answered from its own memory, so nothing is proven. Unplug the drive, plug it back in and press **Check existing files** |
+| **Not verified.** | The data matched, but the computer answered from its own memory, so nothing is proven. Unplug the drive, plug it back in and press **Check test files again** |
 | **Stopped.** | You stopped it. The test files are still there |
 
 | Map colour | Meaning |
@@ -28,7 +29,7 @@ right changes the colours.
 | Bad | Came back wrong |
 | Wrong place | Holds test data that belongs somewhere else: the sign of a drive with fake capacity |
 
-**Remove test files** deletes the test files, after asking. It deletes only files that really hold test data.
+**Delete test files** deletes the test files, after asking. It deletes only files that really hold test data.
 Your own files are never overwritten or deleted. On the drive your system runs from, the test leaves
 5 % of the drive (at least 2 GiB) free. Expect about 40 minutes for a 120 GB SSD and hours for a large hard disk.
 
