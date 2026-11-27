@@ -46,6 +46,33 @@ def time_text(seconds):
     return f"{round(seconds / 60)} min left" if seconds >= 90 else f"{int(seconds)} s left"
 
 
+def test_plan(folder, statvfs=os.statvfs, files=None, system=None):
+    """What pressing Start will do in this folder, in one plain paragraph. Nothing is written to find out."""
+    from disky import engine, safety
+    try:
+        there = (files or engine.test_files)(folder)
+        vfs = statvfs(folder)
+    except OSError:
+        return "Press \"Start test\" to test this drive."
+    if there:
+        n = len(there)
+        return (f"This drive already holds {n} Disky test file{'s' if n != 1 else ''} from an earlier test. "
+                "\"Check test files again\" reads them back and gives a verdict. \"Delete test files\" removes "
+                "them. A new test can start once they are deleted.")
+    free = vfs.f_bavail * vfs.f_frsize
+    on_system = (system or safety.is_system_drive)(folder)
+    keep = safety.system_reserve(vfs.f_blocks * vfs.f_frsize) if on_system else 0
+    amount = max(0, free - keep)
+    if amount < (1 << 20):
+        return "There is no free space here to test."
+    text = (f"\"Start test\" fills the free space here ({drives_mod.size_text(amount)}) with test files, reads all "
+            "of it back, and says whether the drive can be trusted. Your own files are not touched. The test "
+            "files stay until you press \"Delete test files\".")
+    if on_system:
+        text += f" Your system runs from this drive, so {drives_mod.size_text(keep)} is left free."
+    return text + " It takes from minutes to hours, depending on the drive."
+
+
 class TestTab(TabBase):
     title = "Test"
     NOTE = "Pick a drive above. The test fills the drive's free space, then reads it all back."
@@ -82,16 +109,24 @@ class TestTab(TabBase):
         vrow.addWidget(self.verdict_mark)
         vrow.addLayout(words, 1)
         self.stack = QStackedWidget()
+        self.plan = QLabel("")                          # what Start will do, in plain words, before it is pressed
+        self.plan.setWordWrap(True)
+        self.plan.setAlignment(Qt.AlignTop | Qt.AlignLeft)
         self.stack.addWidget(self.status)
         self.stack.addWidget(self.verdict)
+        self.stack.addWidget(self.plan)
         self.stack.setFixedHeight(84)
 
-        self.go = QPushButton("Start")
+        self.plan_of = test_plan                        # replaced in tests
+        self.go = QPushButton("Start test")
+        self.go.setToolTip("Fill the drive's free space with test files, then read all of it back")
         self.go.clicked.connect(self.start_or_stop)
-        self.remove = QPushButton("Remove test files")
+        self.remove = QPushButton("Delete test files")
+        self.remove.setToolTip("Delete the test files Disky wrote here, after asking. Nothing else is deleted")
         self.remove.clicked.connect(self.remove_files)
-        self.check = QPushButton("Check existing files")
-        self.check.setToolTip("Read back test files that are already in the folder")
+        self.check = QPushButton("Check test files again")
+        self.check.setToolTip("Read back test files from an earlier test, for example after plugging the drive "
+                              "in again, and give a verdict")
         self.check.clicked.connect(self.check_existing)
         buttons = QVBoxLayout()
         buttons.addWidget(self.go)
@@ -120,14 +155,17 @@ class TestTab(TabBase):
 
     # -- actions -------------------------------------------------------------------------------------------
     def on_folder(self, _folder, hint):
-        if self.mode is None and hint:
+        if self.mode is None and _folder:
+            self.plan.setText(self.plan_of(_folder))
+            self.stack.setCurrentWidget(self.plan)
+        elif self.mode is None and hint:
             self.stack.setCurrentWidget(self.status)
-            self.status.setText(hint.replace("Press Start.", "Press Start to test this drive."))
+            self.status.setText(hint)
         self.update_buttons()
 
     def update_buttons(self):
         busy = self.mode is not None
-        self.go.setText("Stop" if self.mode in RUNS else "Start")
+        self.go.setText("Stop test" if self.mode in RUNS else "Start test")
         self.go.setEnabled(bool(self.folder) and self.mode != "clean")
         self.remove.setEnabled(bool(self.folder) and not busy)
         self.check.setEnabled(bool(self.folder) and not busy)
@@ -146,7 +184,7 @@ class TestTab(TabBase):
 
     def remove_files(self):
         if self.mode is None and self.folder and self.confirm(
-                f"Remove the test files Disky Business wrote in\n{self.folder} ?\nNothing else is touched."):
+                f"Delete the test files Disky Business wrote in\n{self.folder} ?\nNothing else is touched."):
             self._begin("clean", "--yes")
 
     def _begin(self, mode, *extra):
@@ -154,7 +192,7 @@ class TestTab(TabBase):
         self.phase = ""
         self.removed = 0
         self.stack.setCurrentWidget(self.status)
-        self.status.setText("Removing test files..." if mode == "clean" else "Starting...")
+        self.status.setText("Deleting test files..." if mode == "clean" else "Starting...")
         if mode == "test" and os.path.basename(self.folder) == drives_mod.TEST_FOLDER:
             try:
                 os.makedirs(self.folder, exist_ok=True)     # the app's own folder, on a drive with none to write to
@@ -184,8 +222,8 @@ class TestTab(TabBase):
         elif kind == "error":
             self.error = ev.get("message") or "The engine reported an error."
             if ev.get("code") == "existing_files":
-                self.error = ("This folder already holds Disky test files. Press \"Check existing files\" to "
-                              "read them back, or \"Remove test files\" first.")
+                self.error = ("This drive already holds Disky test files. Press \"Check test files again\" to "
+                              "read them back, or \"Delete test files\" first.")
         elif kind == "summary":
             self.summary = ev
         elif kind == "done" and self.mode == "clean":
@@ -200,7 +238,7 @@ class TestTab(TabBase):
         elif mode == "clean":
             self.stack.setCurrentWidget(self.status)
             kept = (self.summary or {}).get("kept_files") or 0
-            text = "Test files removed." if code == 0 else "Nothing was removed."
+            text = "Test files deleted." if code == 0 else "Nothing was deleted."
             if kept:
                 text += (f" {kept} file{'s' if kept > 1 else ''} with a test file's name kept: no test data inside, "
                          "so it may not be ours. Delete by hand if you are sure.")
