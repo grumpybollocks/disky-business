@@ -112,13 +112,47 @@ class Reader(unittest.TestCase):
             "Hours switched on": ("24 864 hours", "OK", True),
             "Spin up time": ("0 ms", "OK", False),
             "Temperature": ("30 °C", "OK", True),
-            "Airflow temperature celsius": ("40", "Failed in the past", True),   # second temperature, own name
+            "Air temperature": ("40", "Failed in the past", True),   # the second temperature, named apart
             "Total slc erase ct": ("—", "OK", False),                             # named by the drive list
             "Times switched on": ("4 275", "OK", True),
             "Cable errors": ("4", "Check the cable", True),
             "Spots it could not read": ("2 sectors", "Watch", True),
             "Life left": ("85 %", "OK", True),
         })
+
+    def test_a_real_seagate_hard_disk_explained(self):
+        # udisks2's answer for a Seagate hard disk (2026-11-27), the items that need more than a plain number.
+        seagate = [[1, "raw-read-error-rate", 15, 84, 64, 6, 242_921_542, 1, {}],
+                   [188, "command-timeout", 50, 100, 99, 0, 4_296_933_408, 1, {}],     # three counts in one
+                   [190, "airflow-temperature-celsius", 34, 66, 49, 40, 307_150, 4, {}],
+                   [193, "load-cycle-count", 50, 1, 1, 0, 366_830, 1, {}],             # score 1 of 100
+                   [194, "temperature-celsius-2", 34, 34, 51, 0, 307_150, 4, {}],
+                   [241, "total-lbas-written", 0, 100, 253, 0, 2_037_772_822_901, 7, {}]]  # "MB": 2 EB, wrong
+        rows, _ = smart.read(drive(), run=answer(seagate), names_of=lambda *d: {})
+        r = {x.name: x for x in rows}
+        self.assertEqual((r["Commands that timed out"].value, r["Commands that timed out"].status), ("32", "OK"))
+        self.assertIn("three counts here: 32, 30, 1", r["Commands that timed out"].about)
+        self.assertEqual((r["Head parkings"].value, r["Head parkings"].status, r["Head parkings"].main),
+                         ("366 830", "Near its rated limit", True))
+        self.assertIn("Warning: Head parkings: 366 830 (Near its rated limit)", smart.brief(rows))
+        self.assertEqual((r["Temperature"].value, r["Air temperature"].value, r["Air temperature"].main),
+                         ("34 °C", "34 °C", False))
+        self.assertEqual((r["Total lbas written"].value, r["Total lbas written"].about), ("—", smart.NOT_TRUSTED))
+        self.assertIn("Seagate counts every operation", r["Raw read error rate"].about)
+        self.assertEqual(r["Raw read error rate"].status, "OK")
+
+    def test_rated_items_warn_only_near_their_limit(self):
+        def parkings(score, limit=0):
+            rows, _ = smart.read(drive(), run=answer([[193, "load-cycle-count", 50, score, score, limit, 9, 1, {}]]),
+                                 names_of=lambda *d: {})
+            return rows[0].status
+        self.assertEqual([parkings(s) for s in (100, 50, 11, 10, 1)],
+                         ["OK", "OK", "OK", "Near its rated limit", "Near its rated limit"])
+        self.assertEqual(parkings(30, limit=25), "Near its rated limit")
+        self.assertEqual(parkings(20, limit=25), "Worn past its limit")     # past the limit: the drive's own word
+        timeouts, _ = smart.read(drive(), run=answer([[188, "command-timeout", 50, 100, 100, 0, 7, 1, {}]]),
+                                 names_of=lambda *d: {})
+        self.assertEqual((timeouts[0].value, "three counts" in timeouts[0].about), ("7", False))   # small: as is
 
     def test_what_it_means_and_the_score(self):
         r = self.rows()
