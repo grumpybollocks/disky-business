@@ -71,7 +71,7 @@ class SaysWhereTheDriveSits(unittest.TestCase):
         self.assertNotIn("USB", smartread.needs_admin_words("nvme0n1", usb=False))
         self.assertIn("USB case", smartread.needs_admin_words("sdg", usb=True))
         with self.assertRaises(PermissionError) as e:
-            smartread.read("nvme0n1", is_root=False, usb=False)
+            smartread.read("nvme0n1", is_root=False, usb=False, is_block=lambda p: True)
         self.assertIn("internal drive", str(e.exception))
 
 

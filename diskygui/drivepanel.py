@@ -3,6 +3,7 @@
 
 A tab owns one panel and listens to `changed(folder, hint)`. No drive is ever picked for the user.
 """
+import gc
 import threading
 import time
 
@@ -30,11 +31,44 @@ def _run(work, box):
     box.done = True
 
 
+# Python's garbage collector must never run on a worker thread. When it did (2026-11-27), PySide handed the
+# freeing of collected widgets to the window's thread and Qt freed a label twice: Segmentation fault, now and
+# then. So collection is paused, on the window's thread, before a job starts, and resumed there once no job is
+# left running. Jobs last seconds (a question to the drive service, or a password prompt), so nothing piles up.
+_running = []                                           # boxes of the jobs still running
+_reaper = None
+_was_on = True                                          # collection was on before the first job paused it
+
+
+def _pause_collection(box):
+    global _reaper, _was_on
+    if not _running:
+        _was_on = gc.isenabled()
+        gc.disable()
+    _running.append(box)
+    if _reaper is None:
+        app = QApplication.instance()
+        _reaper = QTimer(app)                           # lives with the application, not with one panel
+        _reaper.setInterval(50)
+        _reaper.timeout.connect(_resume_collection)
+    _reaper.start()
+
+
+def _resume_collection():
+    _running[:] = [b for b in _running if not b.done]
+    if not _running:
+        if _reaper is not None:
+            _reaper.stop()
+        if _was_on:
+            gc.enable()
+
+
 class _Job:
     """One piece of slow work (asking the system about a drive) done off the window's thread."""
 
     def __init__(self, work, then):
         self.then, self.box = then, _Box()
+        _pause_collection(self.box)
         threading.Thread(target=_run, args=(work, self.box), daemon=True).start()
 
     @property
