@@ -67,6 +67,19 @@ class Parse(unittest.TestCase):
                          ["EXAMPLE USB HDD", "EXAMPLE USB SSD", "EXAMPLE HDD 4T", "EXAMPLE NVME 2TB", "EXAMPLE NVME 1TB",
                           "EXAMPLE SSD 240G"])     # removable first, then by size; no DVD, no loop device
 
+    def test_nvme_with_no_drive_size_takes_it_from_its_namespace(self):
+        # Real udisks2 answer (Manjaro, 2026-11-27): the NVMe Drive says Size 0, its nvme0n1 block has the size.
+        # Empty card readers say Size 0 everywhere and stay hidden.
+        answer = {"data": [{
+            D + "nvme0": drive("KINGSTON EXAMPLE 500G", 0, NVMe_Controller={"SmartUpdated": 1}),
+            D + "reader": drive("Generic MassStorageClass", 0, bus="usb"),
+            B + "nvme0n1": block("nvme0", 500_107_862_016, ""),
+            B + "sde": block("reader", 0, ""),
+        }]}
+        found = dr.parse(answer)
+        self.assertEqual([(x.model, x.size, x.device, x.smart) for x in found],
+                         [("KINGSTON EXAMPLE 500G", 500_107_862_016, "nvme0n1", "nvme")])
+
     def test_kind_and_label(self):
         self.assertEqual({m: x.kind_text() for m, x in self.d.items()},
                          {"EXAMPLE USB HDD": "USB HDD", "EXAMPLE USB SSD": "USB SSD", "EXAMPLE HDD 4T": "HDD", "EXAMPLE NVME 2TB": "NVMe",
