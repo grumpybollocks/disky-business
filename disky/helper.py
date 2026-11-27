@@ -20,7 +20,7 @@ import threading
 ALLOWED = {
     "trim": {},
     "fragscan": {},
-    "smart": {},
+    "smart": {"--deep": None, "--serial": None},
     "selftest": {"--kind": ("short", "long")},
     "fscheck": {},
     "fsrepair": {"--yes": None},

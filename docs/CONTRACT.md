@@ -80,6 +80,19 @@ drive service cannot read (USB cases). Only reads. `smart_data` has `device` and
 `nvme_smart_health_information_log`, model, firmware). Errors: `needs_admin`, `no_smart` (the case passes
 nothing on; smartctl's own message is included).
 
+## Deep scan (added 2026-11-27, still contract version 1)
+
+`disky smart <drive> --deep [--serial]`: everything `smartctl -x -j` reports, read-only, with admin rights
+(the window uses the admin session). `smart_deep` has `device` and `data`: smartctl's own sections for identity
+(`model_family`, `model_name`, `firmware_version`, `user_capacity`, `rotation_rate`, `form_factor`,
+`interface_speed`, ...), health now (`smart_status`, `power_on_time`, `temperature`, `endurance_used`, ...)
+and history (`ata_smart_error_log`, `ata_smart_self_test_log`, `nvme_error_information_log`,
+`nvme_self_test_log`, `ata_sct_temperature_history`, `ata_device_statistics`, `sata_phy_event_counters`),
+plus two of Disky's own: `maker` (the registered owner of the drive's maker number, or null) and
+`production_date` (always null: SATA and NVMe drives do not report one). `wwn` never holds its unique part.
+`serial_number` is present only with `--serial`. Errors: `needs_admin`, `no_smart`, `bad_options`
+(`--serial` without `--deep`).
+
 ## SMART self-test (added 2026-11-26, still contract version 1)
 
 `disky selftest <drive> [--kind short|long]` (a name like `sdb`). The drive tests itself; the drive service
