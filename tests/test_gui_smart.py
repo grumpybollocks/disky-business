@@ -141,6 +141,13 @@ class Reader(unittest.TestCase):
         self.assertIn("Seagate counts every operation", r["Raw read error rate"].about)
         self.assertEqual(r["Raw read error rate"].status, "OK")
 
+    def test_a_stick_is_told_it_keeps_no_record_not_blamed_on_a_case(self):
+        stick = Drive("EXAMPLE STICK", 61_904_781_312, "stick", True, Health(), path="/x", smart="")
+        case = Drive("USB SSD", 120_040_980_480, "SSD", True, Health(), path="/y", smart="")
+        self.assertEqual(smart.read(stick, run=lambda *a, **k: self.fail("nothing to ask")), ([], smart.NO_SMART_STICK))
+        self.assertEqual(smart.read(case, run=lambda *a, **k: self.fail("nothing to ask")), ([], smart.NO_SMART))
+        self.assertIn("Test tab", smart.NO_SMART_STICK)
+
     def test_rated_items_warn_only_near_their_limit(self):
         def parkings(score, limit=0):
             rows, _ = smart.read(drive(), run=answer([[193, "load-cycle-count", 50, score, score, limit, 9, 1, {}]]),

@@ -200,7 +200,7 @@ class DefragTab(TabBase):
     def _show_worst(self):
         self.files.clear()
         self.files.addItems([f"{w['pieces']} pieces    {size_text(w['bytes'])}    {w['path']}"
-                             + ("    (shared with a snapshot: left alone)" if w.get("shared") else "")
+                             + ("    (shared with a snapshot or a copy: left alone)" if w.get("shared") else "")
                              for w in self.worst])
 
     def on_event(self, ev):

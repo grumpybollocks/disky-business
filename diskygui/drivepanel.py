@@ -214,6 +214,8 @@ class DrivePanel(QWidget):
 
     def health_lines(self, d):
         """Health, temperature and hours, then wear and warnings from the drive's SMART record."""
+        if not d.smart and d.kind == "stick" and d.health.state == "unknown":
+            return ["No health data: sticks and memory cards keep none."]
         if not d.smart and d.usb and d.health.state == "unknown":
             return ["No health data: this USB case does not pass it on."]
         return d.health.lines()

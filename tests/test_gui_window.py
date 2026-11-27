@@ -100,6 +100,14 @@ class Window(unittest.TestCase):
         self.assertIn("unexpectedly", detail)
         self.assertTrue(tab.go.isEnabled())
 
+    def test_a_python_error_in_the_engine_is_a_crash_not_a_bad_drive(self):
+        tab = self.run_to_end("python_error")
+        title, detail = self.shown(tab)
+        self.assertEqual(title, "The test did not finish.")
+        self.assertIn("unexpectedly", detail)
+        self.assertIn("TypeError", detail)                  # the engine's own last words, to report the bug
+        self.assertNotEqual(tab.verdict_state, "good")
+
     def test_engine_error_message_is_shown(self):
         title, detail = self.shown(self.run_to_end("refuse"))
         self.assertEqual(title, "Could not run.")
