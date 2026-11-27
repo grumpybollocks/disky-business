@@ -9,13 +9,14 @@ right changes the colours.
 1. Pick the drive. If it says "Not mounted", press **Mount**.
 2. Read the line under the map: it says how much will be written and what happens to your files. Press
    **Start test**. The test fills the drive's free space with test files, then reads all of it back.
-   Each square of the map is a part of the drive.
+   Each square of the map is a part of the drive. A bar shows how far it is, the speed and the time left.
+   **Stop test** says "Stopping..." at once; it ends after the block in hand.
 3. Read the verdict.
 
 | Verdict | What it means |
 |---|---|
 | **Drive is good.** | Everything written came back from the drive, unchanged |
-| **Drive is bad** | Some blocks came back wrong or not at all. Do not trust the drive. A stick that claims more space than it has ends here |
+| **Drive is bad** | Some blocks came back wrong or not at all. Do not trust the drive. A stick that claims more space than it has ends here. Before giving up on it, try another port and another cable or card reader, format the drive and test again: a faulty port or reader can look like a faulty drive |
 | **Not verified.** | The data matched, but the computer answered from its own memory, so nothing is proven. Unplug the drive, plug it back in and press **Check test files again** |
 | **Stopped.** | You stopped it. The test files are still there |
 
@@ -51,6 +52,20 @@ listed first, problems in red; **Show all items** lists the rest.
 - A drive in a USB case often shows nothing. **Read with admin password** reads it another way (with `smartctl`).
 - "Cable errors" usually means the cable or connector, not the drive.
 
+**Deep scan** reads everything the drive knows about itself (it only reads; admin password). A window opens:
+
+- **Identity**: maker, family, model, firmware, size, interface and its speed, kind (spinning or solid state),
+  form factor, TRIM, hours on. The serial number stays hidden until you tick **Show serial number**.
+  Production date: SATA and NVMe drives do not report one; only SAS drives do, so it says "not reported".
+- **Errors the drive logged**: when, and what went wrong. Old errors that do not grow are less worrying than
+  new ones: scan again later and compare.
+- **Self-test history**: passed, stopped or failed.
+- **Lifetime statistics**: data written and read, times switched on, spots replaced, hottest ever, wear used.
+- **Link errors**: damaged data on the cable points to the cable or port, not the drive.
+- **Temperature record**: the lowest and highest of recent days, and now.
+
+**Save report...** writes it all to a text file, the serial number left out unless ticked.
+
 ## Defrag
 
 **Scan** shows how fragmented the files are and lists the worst. On btrfs, ext4 and XFS, **Defragment all**
@@ -80,7 +95,7 @@ Pick a partition. It must be unmounted first (**Unmount**, on the left).
 
 ## The password
 
-Most things need no password. TRIM, the exFAT scan, SMART through a USB case and self-tests need admin rights.
+Most things need no password. TRIM, the exFAT scan, SMART through a USB case, the deep scan and self-tests need admin rights.
 The app asks you first, and the password is asked **once per session**: after that an "Admin session open: End"
 button shows at the bottom, and no further password is asked until you press it or close the app. That session
 runs only Disky's own jobs. Mounting or checking a drive that is built into the computer may bring up the
