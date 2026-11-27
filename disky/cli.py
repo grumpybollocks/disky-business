@@ -40,6 +40,9 @@ _COMMAND_HINT = {("test", "stopped"): " Check them: disky verify <folder>   Remo
                  ("write", "stopped"): " Check them: disky verify <folder>   Remove them: disky clean <folder> --yes"}
 
 
+NO_FILES = "No files with data here to scan."
+
+
 class Printer:
     """Turns events into JSON lines (for the window) or plain words (for people)."""
 
@@ -79,6 +82,8 @@ class Printer:
         elif kind == "defrag_result":
             self._say(f"{ev['before']} pieces before, {ev['after']} after. Content checked: unchanged. "
                       f"(tool: {ev['tool']}, exit {ev['exit']})")
+        elif kind in ("frag_files", "frag_summary") and not ev["files"] and not ev.get("skipped"):
+            self._say(NO_FILES)
         elif kind == "frag_files":
             pct = 100 * ev["fragmented_files"] / ev["files"] if ev["files"] else 0
             self._say(f"{ev['fragmented_files']} of {ev['files']} files are in more than one piece ({pct:.1f} %), "

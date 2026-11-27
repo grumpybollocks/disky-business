@@ -131,6 +131,12 @@ class DefragTabTests(unittest.TestCase):
         bad = [i for i, s in enumerate(tab.map._shown.tolist()) if s == mm.BAD]
         self.assertEqual({tab.map.blocks_of(i)[0] for i in bad}, {310})             # and it shows on the map
 
+    def test_an_empty_folder_is_not_shown_as_0_of_0(self):
+        tab = self.open("frag", "ext4")
+        tab.on_event({"event": "frag_files", "files": 0, "fragmented_files": 0, "file_bytes": 0,
+                      "fragmented_bytes": 0, "skipped": 0, "worst": []})
+        self.assertEqual(tab.summary, "No files with data here to scan.")
+
     def test_a_small_share_is_not_shown_as_nothing(self):
         from diskygui.defragtab import share_text
         self.assertEqual([share_text(9, 50000), share_text(0, 10), share_text(2, 10), share_text(1, 1000)],
