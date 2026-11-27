@@ -209,10 +209,35 @@ class InTheWindow(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
+    def setUp(self):
+        # Never ask the real system from a window test: its answer comes on a worker thread that can outlive
+        # the test, and a window freed on that thread crashed the test run (CI, Python 3.13).
+        from unittest import mock
+        from diskygui import smart
+        self.real_reads = []
+        patch = mock.patch.object(smart, "read", lambda d: self.real_reads.append(d.model) or ([], ""))
+        patch.start()
+        self.addCleanup(patch.stop)
+
+    def tearDown(self):
+        self.assertEqual(self.real_reads, [], "a window test asked the real system for SMART data")
+
     def open(self, found):
         win = MainWindow(theme=THEMES["w98"], runner=EngineRunner([sys.executable, "-c", "pass"]), drives=lambda: found)
-        self.addCleanup(win.close)
+        for page in win.pages:
+            page.panel.read_smart = lambda d: ([], "")
+        self.addCleanup(self.close, win)
         return win.pages[0]
+
+    def close(self, win):
+        """Finish the window's slow work, then free it here on the window's own thread."""
+        import gc
+        for page in win.pages:
+            page.panel.settle()
+        win.close()
+        win.deleteLater()
+        QApplication.sendPostedEvents(None, QEvent.DeferredDelete)
+        gc.collect()
 
     def test_list_health_and_folder(self):
         found = dr.parse(ANSWER)
