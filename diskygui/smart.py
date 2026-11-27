@@ -117,7 +117,12 @@ def _readable(name):
     return name.replace("_", " ").replace("-", " ").strip().capitalize()
 
 
-def ata_rows(attrs, names=None):
+def packs_counts(model):
+    """Seagate hard disks (models ST + digits) pack three 16-bit counts into "Command timeout"."""
+    return bool(re.match(r"ST\d", (model or "").strip()))
+
+
+def ata_rows(attrs, names=None, packed=False):
     """attrs = list of (id, name, flags, value, worst, threshold, pretty, pretty_unit, expansion).
     names = {id: name} from smartmontools' drive list, which wins over the service's own names."""
     names = names or {}
@@ -143,7 +148,7 @@ def ata_rows(attrs, names=None):
                 shown = f"{value} %"
             elif status == "OK" and rule in ("zero", "cable") and unit in (1, 3) and pretty > 0:
                 status = "Watch" if rule == "zero" else "Check the cable"
-            elif rule == "packed" and unit == 1 and pretty > 0xFFFF:
+            elif rule == "packed" and packed and unit == 1 and pretty > 0xFFFF:
                 # Some makers (Seagate) pack three 16-bit counts into this one number; smartctl shows them apart.
                 parts = [(pretty >> s) & 0xFFFF for s in (0, 16, 32)]
                 shown = _num(parts[0])
@@ -287,7 +292,7 @@ def _unwrap(v):
 def read(drive, run=subprocess.run, names_of=smartdb.names):
     """(rows, message). rows is empty and message says why when nothing can be read."""
     if not drive.smart or not drive.path:
-        return [], NO_SMART_STICK if drive.kind == "stick" else NO_SMART
+        return [], NO_SMART_STICK if drive.flash else NO_SMART
     cmd = ["busctl", "--system", "--json=short", "call", "org.freedesktop.UDisks2", drive.path,
            _IFACE[drive.smart], "SmartGetAttributes", "a{sv}", "0"]
     try:
@@ -298,5 +303,5 @@ def read(drive, run=subprocess.run, names_of=smartdb.names):
     except (OSError, ValueError, KeyError, IndexError, subprocess.SubprocessError) as e:
         return [], f"Could not ask the system for SMART details ({e.__class__.__name__})."
     if drive.smart == "ata":
-        return ata_rows(data, names_of(drive.model, drive.firmware, drive.kind)), ""
+        return ata_rows(data, names_of(drive.model, drive.firmware, drive.kind), packs_counts(drive.model)), ""
     return nvme_rows({k: _unwrap(v) for k, v in data.items()}), ""

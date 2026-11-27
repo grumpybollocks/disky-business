@@ -42,6 +42,13 @@ EVENTS = {
     "speed_result": {"test": STR, "mib_per_s": NUM, "iops": OPT_INT, "direct": OPT_BOOL,
                      "read_from_drive": OPT_BOOL},
 }
+# Fields added later within contract version 1: not every engine sends them, but when one is sent it must have
+# this type. A window reads them with a default.
+OPTIONAL = {
+    "frag_files": {"shared_files": INT, "shared_bytes": INT},
+    "defragall_result": {"shared": INT},
+    "trim_info": {"auto_discard": BOOL},
+}
 FRAG_STATES = {"free", "whole", "fragmented", "other"}
 SPEED_TESTS = {"seq_write", "seq_read", "rand_read", "rand_write"}
 PHASES = {"write", "verify"}
@@ -59,6 +66,9 @@ def problems(ev):
         if field not in ev:
             out.append(f"{kind}: missing {field}")
         elif isinstance(ev[field], bool) and kinds not in (BOOL, OPT_BOOL) or not isinstance(ev[field], kinds):
+            out.append(f"{kind}: {field} has the wrong type")
+    for field, kinds in OPTIONAL.get(kind, {}).items():
+        if field in ev and (isinstance(ev[field], bool) and kinds is not BOOL or not isinstance(ev[field], kinds)):
             out.append(f"{kind}: {field} has the wrong type")
     if out:
         return out

@@ -58,7 +58,10 @@ class Info(unittest.TestCase):
         put(mi, "60 1 0:27 /@home /home rw,noatime master:2 - btrfs /dev/nvme0n1p3 "
                 "rw,compress=zstd:1,ssd,discard=async,space_cache=v2\n"
                 "61 1 0:28 / /media/my\\040disk rw,discard - ext4 /dev/sdb1 rw\n"
-                "62 1 0:29 / /media/other rw - ext4 /dev/sdc1 rw,nodiscard\n")
+                "62 1 0:29 / /media/other rw - ext4 /dev/sdc1 rw,nodiscard\n"
+                "63 1 0:30 / /media/twice rw,discard - ext4 /dev/sdd1 rw\n"
+                "64 1 0:31 / /media/twice rw - ext4 /dev/sde1 rw\n")      # mounted over: the last one counts
+        self.assertFalse(trim.auto_discard("/media/twice", mi))
         self.assertTrue(trim.auto_discard("/home", mi))
         self.assertTrue(trim.auto_discard("/media/my disk", mi))
         self.assertFalse(trim.auto_discard("/media/other", mi))

@@ -90,7 +90,9 @@ On btrfs:
 - **Files shared with a snapshot or a copy** (Timeshift, Snapper, `cp --reflink`) are listed but never
   defragmented: defragmenting unshares them, and their data would be stored a second time. The scan says how many
   there are, and "Defragment all" offers only the others.
-- A file another program changes while it is being defragmented is left as it is and counted apart.
+- If a file's content changes while it is being defragmented, the run stops at once and nothing more is
+  touched. The message says whether another program was most likely writing to it (close it and run again) or
+  the system's tool changed it (stop using it on that drive).
 
 ## Care: check, repair, trim
 
