@@ -88,6 +88,7 @@ class CommandLine(unittest.TestCase):
             self.assertEqual(code, 1)
             self.assertIn("Drive is BAD", out)
             self.assertIn("Block 2", out)
+            self.assertIn("another port and another cable", out)              # H2testw's advice
 
     def test_second_run_refuses_and_keeps_files(self):
         with Folder() as folder:

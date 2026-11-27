@@ -9,7 +9,7 @@ from PySide6.QtCore import QSettings, Qt, QTimer, Signal
 from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow,
                                QMessageBox, QPushButton, QStackedWidget, QTabWidget, QVBoxLayout, QWidget)
 
-from disky import tips
+from disky import advice, tips
 
 from . import drives as drives_mod
 from .chrome import font as theme_font, stylesheet
@@ -278,7 +278,7 @@ class TestTab(TabBase):
             detail = f"{read} read back."
             if s.get("missing_bytes"):
                 detail += f" {size_text(s['missing_bytes'])} of test data is missing."
-            return "bad", title + ".", detail + " Do not trust this drive with anything you like."
+            return "bad", title + ".", detail + " Do not trust this drive with anything you like. " + advice.BAD_DRIVE
         if verdict == "not_verified":
             return "changed", "Not verified.", ("The data matched, but the computer answered from its own memory "
                                                "and not from the drive, so this proves nothing.")

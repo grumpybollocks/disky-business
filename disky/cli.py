@@ -8,7 +8,7 @@ import stat
 import sys
 import threading
 
-from . import __version__, engine, exfat, frag, fscare, helper, mounts, proc, safety, selftest, smartread, speed, tips, trim
+from . import __version__, advice, engine, exfat, frag, fscare, helper, mounts, proc, safety, selftest, smartread, speed, tips, trim
 
 EXIT = {"good": 0, "bad": 1, "not_verified": 2, "nothing_to_check": 3, "stopped": 130}
 _UNITS = {"K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}
@@ -104,7 +104,8 @@ class Printer:
             lost = (s["changed"] + s["bad"] + s["overwritten"]) * 512 + ev["missing_bytes"]
             return (f"Drive is BAD. {human(lost)} of {human(ev['bytes_read'] + ev['missing_bytes'])} came back "
                     f"wrong or missing, first at {human(ev['first_bad_offset'])}. "
-                    f"Sectors: {s['bad']} wrong, {s['changed']} slightly changed, {s['overwritten']} overwritten.")
+                    f"Sectors: {s['bad']} wrong, {s['changed']} slightly changed, {s['overwritten']} overwritten. "
+                    + advice.BAD_DRIVE)
         if ev["verdict"] == "not_verified":
             return ("NOT VERIFIED. The data matched, but it came from the computer's memory, not from the drive "
                     f"({ev['read_from_drive_pct']}% read from the drive). Unplug the drive, plug it back in and "
