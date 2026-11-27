@@ -3,8 +3,8 @@
 import math
 
 from PySide6.QtCore import QPointF, Qt
-from PySide6.QtGui import QColor, QPainter, QPen, QPolygonF
-from PySide6.QtWidgets import QFrame, QGridLayout, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
+from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
 from .tabbase import TabBase
 
@@ -12,6 +12,8 @@ ROWS = (("seq_write", "Writing in one go"), ("seq_read", "Reading in one go"),
         ("rand_read", "Small reads, random places"), ("rand_write", "Small writes, random places"))
 WORDS = dict(ROWS)
 LINES = {"seq_write": "written", "seq_read": "good"}      # graph line -> theme state colour
+BAR_COLOUR = {"seq_write": "written", "seq_read": "good", "rand_read": "good", "rand_write": "written"}
+BAR_TOP = 1000                                            # MiB/s at the right end of a bar, unless one is faster
 
 
 def result_text(r):
@@ -23,6 +25,86 @@ def result_text(r):
     return text
 
 
+class _Value:
+    """One result as text (kept apart from the drawing, so it can be read without a screen)."""
+
+    def __init__(self, owner):
+        self._text, self._owner = "-", owner
+
+    def text(self):
+        return self._text
+
+    def setText(self, text):
+        self._text = text
+        self._owner.update()
+
+
+class SpeedBars(QWidget):
+    """The four results as big numbers, each with a bar. Bars grow on a ten-fold scale, because small random
+    writes and reading in one go lie a thousand times apart and both must stay visible."""
+    ROW = 46
+
+    def __init__(self, theme, parent=None):
+        super().__init__(parent)
+        self.theme = theme
+        self.speeds = {}                                # test -> MiB/s
+        self.values = {test: _Value(self) for test, _ in ROWS}
+        self.setMinimumHeight(self.ROW * len(ROWS) + 8)
+        self.setMinimumWidth(360)
+
+    def clear(self):
+        self.speeds = {}
+        for v in self.values.values():
+            v.setText("-")
+
+    def set_result(self, test, speed, text):
+        if test in self.values:
+            self.speeds[test] = max(0.0, float(speed or 0))
+            self.values[test].setText(text)
+
+    def fraction(self, test):
+        """How much of its track a bar fills, 0 to 1."""
+        speed = self.speeds.get(test)
+        if not speed:
+            return 0.0
+        top = max([BAR_TOP] + list(self.speeds.values()))
+        return min(1.0, math.log10(1 + speed) / math.log10(1 + top))
+
+    def paintEvent(self, _event):
+        t = self.theme
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        ink, faint = QColor(t.text), QColor(t.text)
+        faint.setAlpha(40)
+        big = QFont(self.font())
+        big.setPixelSize(max(15, self.font().pixelSize() + 7))
+        big.setBold(True)
+        label_w = min(210, self.width() // 3)
+        number_w = min(300, self.width() // 3)
+        bar_x, bar_w = label_w + 8, max(40, self.width() - label_w - number_w - 24)
+        for row, (test, words) in enumerate(ROWS):
+            y = 4 + row * self.ROW
+            p.setFont(self.font())
+            p.setPen(ink)
+            p.drawText(0, y, label_w, self.ROW - 6, Qt.AlignLeft | Qt.AlignVCenter | Qt.TextWordWrap, words)
+            track_y, track_h = y + self.ROW // 2 - 9, 14
+            p.setPen(Qt.NoPen)
+            p.setBrush(faint)
+            p.drawRoundedRect(bar_x, track_y, bar_w, track_h, 4, 4)
+            filled = int(bar_w * self.fraction(test))
+            if filled > 0:
+                p.setBrush(QColor(t.states[BAR_COLOUR[test]]))
+                p.drawRoundedRect(bar_x, track_y, max(8, filled), track_h, 4, 4)
+            number, _, rest = self.values[test].text().partition("   ")
+            p.setPen(ink)
+            p.setFont(big)
+            p.drawText(bar_x + bar_w + 12, y, number_w, 24, Qt.AlignLeft | Qt.AlignVCenter, number)
+            p.setFont(self.font())
+            p.drawText(bar_x + bar_w + 12, y + 22, number_w, self.ROW - 26, Qt.AlignLeft | Qt.AlignTop,
+                       rest.strip().strip("()"))
+        p.end()
+
+
 class SpeedGraph(QWidget):
     """Speed along the file, one line per sequential run."""
 
@@ -31,7 +113,7 @@ class SpeedGraph(QWidget):
         self.theme = theme
         self.samples = {k: [] for k in LINES}       # test -> [(offset_bytes, mib_per_s)]
         self.total = 0
-        self.setMinimumHeight(200)
+        self.setMinimumHeight(140)
 
     def clear(self):
         self.samples = {k: [] for k in LINES}
@@ -60,6 +142,15 @@ class SpeedGraph(QWidget):
         span, ceil = max(self.total, 1), self.top()
         return [QPointF(left + w * off / span, top + h * (1 - s / ceil)) for off, s in self.samples[test]]
 
+    def smooth(self, test):
+        """The line as drawn: each point averaged with its neighbours, so single jumps do not make it jagged."""
+        pts = self.points(test)
+        if len(pts) < 3:
+            return pts
+        ys = [p.y() for p in pts]
+        avg = [ys[0]] + [(ys[i - 1] + ys[i] + ys[i + 1]) / 3 for i in range(1, len(ys) - 1)] + [ys[-1]]
+        return [QPointF(pt.x(), y) for pt, y in zip(pts, avg)]
+
     def paintEvent(self, _event):
         t = self.theme
         p = QPainter(self)
@@ -77,13 +168,25 @@ class SpeedGraph(QWidget):
         p.drawText(left, top + h + 6, w, 20, Qt.AlignLeft, "start of the file")
         p.drawText(left, top + h + 6, w, 20, Qt.AlignRight, "end   (MiB/s up the side)")
         p.setRenderHint(QPainter.Antialiasing)
+        base = top + h
         for test, state in LINES.items():
-            pts = self.points(test)
-            p.setPen(QPen(QColor(t.states[state]), 3))
+            pts = self.smooth(test)
+            colour = QColor(t.states[state])
             if len(pts) > 1:
+                area = QPainterPath(QPointF(pts[0].x(), base))      # the filled shape under the line
+                for pt in pts:
+                    area.lineTo(pt)
+                area.lineTo(pts[-1].x(), base)
+                area.closeSubpath()
+                fill = QColor(colour)
+                fill.setAlpha(45)
+                p.fillPath(area, fill)
+                p.setPen(QPen(colour, 2.5, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
                 p.drawPolyline(QPolygonF(pts))
-            for pt in pts[-1:] if len(pts) > 1 else pts:
-                p.drawEllipse(pt, 3, 3)
+            p.setPen(QPen(colour, 2))
+            p.setBrush(colour)
+            for pt in pts[-1:]:
+                p.drawEllipse(pt, 3.5, 3.5)
         p.end()
 
 
@@ -98,18 +201,10 @@ class SpeedTab(TabBase):
         frame = self.framed(self.graph)
         key = self.legend([(state, WORDS[test]) for test, state in LINES.items()])
 
-        table = QFrame()
-        table.setObjectName("verdict")
-        grid = QGridLayout(table)
-        self.values = {}
-        for row, (test, words) in enumerate(ROWS):
-            name = QLabel(words)
-            value = QLabel("-")
-            value.setObjectName("speedvalue")
-            grid.addWidget(name, row, 0)
-            grid.addWidget(value, row, 1)
-            self.values[test] = value
-        grid.setColumnStretch(1, 1)
+        self.bars = SpeedBars(theme)                    # the four results, big, each with a bar
+        self.values = self.bars.values
+        caption = QLabel("Speed along the file, for the two runs in one go")
+        caption.setObjectName("heading")
 
         self.status = QLabel("Pick a drive, then press Start.")
         self.status.setWordWrap(True)                   # a long reason must never force the window wide
@@ -121,16 +216,19 @@ class SpeedTab(TabBase):
         bottom.addWidget(self.go)
 
         right = QVBoxLayout()
+        right.addWidget(self.bars)
+        right.addSpacing(6)
+        right.addWidget(caption)
         right.addWidget(frame, 1)
         right.addLayout(key)
-        right.addWidget(table)
         right.addLayout(bottom)
         self.assemble(right)
         self.set_theme(theme)
         self.update_buttons()
 
     def set_theme(self, theme):
-        self.theme = self.graph.theme = theme
+        self.theme = self.graph.theme = self.bars.theme = theme
+        self.bars.update()
         self.paint_legend(theme.states)
         self.graph.update()
 
@@ -154,8 +252,7 @@ class SpeedTab(TabBase):
     def begin(self, *extra):
         self.error, self.results = None, {}
         self.graph.clear()
-        for value in self.values.values():
-            value.setText("-")
+        self.bars.clear()
         self.status.setText("Starting...")
         self.set_busy("speed")
         self.runner.start("speed", self.folder, *extra)
@@ -170,7 +267,7 @@ class SpeedTab(TabBase):
             self.graph.add(ev.get("test"), ev.get("offset_bytes", 0), ev.get("mib_per_s", 0))
         elif kind == "speed_result" and ev.get("test") in self.values:
             self.results[ev["test"]] = ev
-            self.values[ev["test"]].setText(result_text(ev))
+            self.bars.set_result(ev["test"], ev.get("mib_per_s"), result_text(ev))
         elif kind == "warning":
             self.tip(ev.get("message", ""))
         elif kind == "error":
