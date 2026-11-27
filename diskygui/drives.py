@@ -99,7 +99,16 @@ class Drive:
         return f"{size_text(self.size)}  {self.kind_text()}\n{self.model}"
 
     def kind_text(self):
+        if self.kind == "stick":
+            return "USB stick"
+        if self.kind == "card":
+            return "Memory card"
         return ("USB " if self.usb else "") + self.kind
+
+    @property
+    def flash(self):
+        """A USB stick or a memory card: they keep no SMART record."""
+        return self.kind in ("stick", "card")
 
     def target(self, home=None, writable=None, mounted_ro=None):
         """Where a test of this drive would write: (folder, "") or (None, reason in plain words)."""
@@ -166,19 +175,27 @@ def _health(ifaces):
     return Health()
 
 
+# Media names the drive service gives flash sticks and memory cards (udisks2 "Media" / "MediaCompatibility").
+_FLASH_MEDIA = {"thumb", "flash", "flash_cf", "flash_ms", "flash_sm", "flash_sd", "flash_sdhc", "flash_sdxc",
+                "flash_sdio", "flash_sd_combo", "flash_mmc"}
+
+
 def parse(answer):
     """busctl's JSON answer -> list of Drive, biggest first within: removable, then the rest."""
     objs = answer["data"][0] if isinstance(answer, dict) and answer.get("data") else {}
     drives = {}
     for path, ifaces in objs.items():
         d = _props(ifaces, "Drive")
-        if "/drives/" not in path or not d or d.get("Optical") or not d.get("Size"):
-            continue
+        if "/drives/" not in path or not d or d.get("Optical"):
+            continue                                # Size may be 0 for NVMe: taken from its whole-drive block below
         nvme = (_P + "NVMe.Controller") in ifaces
         rpm = d.get("RotationRate") or 0            # -1 = spinning, speed unknown; 0 = not spinning
-        kind = "NVMe" if nvme else "SSD" if rpm == 0 else "HDD"
+        media = {d.get("Media") or ""} | set(d.get("MediaCompatibility") or [])
+        # The service names the media, so sticks and cards need no guess from the rotation rate.
+        flash = "stick" if "thumb" in media else "card" if media & _FLASH_MEDIA else ""
+        kind = "NVMe" if nvme else flash or ("SSD" if rpm == 0 else "HDD")
         smart = "nvme" if nvme else "ata" if (_P + "Drive.Ata") in ifaces else ""
-        drives[path] = Drive((d.get("Model") or "Drive").strip(), int(d["Size"]), kind,
+        drives[path] = Drive((d.get("Model") or "Drive").strip(), int(d.get("Size") or 0), kind,
                              d.get("ConnectionBus") == "usb", _health(ifaces), path=path, smart=smart,
                              firmware=(d.get("Revision") or "").strip())
     for path, ifaces in objs.items():
@@ -187,6 +204,8 @@ def parse(answer):
             continue
         if (_P + "Partition") not in ifaces:
             drives[b["Drive"]].device = path.rsplit("/", 1)[-1]
+            if not drives[b["Drive"]].size:         # udisks gives NVMe drives Size 0; the namespace has it
+                drives[b["Drive"]].size = int(b.get("Size") or 0)
         if _props(ifaces, "Swapspace").get("Active"):
             drives[b["Drive"]].other_use = "swap space"
         elif _props(ifaces, "Encrypted").get("CleartextDevice", "/") not in ("/", "", None):
@@ -198,7 +217,8 @@ def parse(answer):
         mounts = [bytes(m).rstrip(b"\0").decode("utf-8", "replace") for m in (fs.get("MountPoints", {}).get("data") or [])]
         drives[b["Drive"]].volumes.append(Volume(path.rsplit("/", 1)[-1], int(b.get("Size") or 0),
                                                  b.get("IdType") or "", mounts, bool(b.get("ReadOnly"))))
-    return sorted(drives.values(), key=lambda d: (not d.usb, -d.size, d.model))
+    found = [d for d in drives.values() if d.size]  # no size anywhere = empty card reader: not a drive to show
+    return sorted(found, key=lambda d: (not d.usb, -d.size, d.model))
 
 
 def read(run=subprocess.run):

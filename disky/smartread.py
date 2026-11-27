@@ -57,12 +57,31 @@ def errors_of(js):
     return [m.get("string", "") for m in msgs if isinstance(m, dict) and m.get("severity") == "error"]
 
 
-def read(device, run=proc.run, is_root=None, is_block=None):
+def on_usb(device, sys_block="/sys/class/block"):
+    """True when the drive is connected through USB (its place in the system's device tree passes a USB port).
+    Takes a drive or a partition, by name or by any /dev path (links such as /dev/disk/by-path are followed)."""
+    try:
+        name = os.path.basename(os.path.realpath(device) if device.startswith("/") else device)
+        node = os.path.join(sys_block, name)
+        return os.path.exists(node) and "/usb" in os.path.realpath(node)
+    except (OSError, ValueError):
+        return False
+
+
+def needs_admin_words(device, usb=None):
+    usb = on_usb(device) if usb is None else usb
+    if usb:
+        return "Reading SMART through a USB case needs admin rights (smartctl). Run it with sudo, or use the window."
+    return ("Reading SMART with smartctl needs admin rights. This is an internal drive: the window's SMART tab "
+            "reads it without a password.")
+
+
+def read(device, run=proc.run, is_root=None, is_block=None, usb=None):
     """The parts of `smartctl -j` the window shows. Raises PermissionError, ValueError (nothing to show)."""
-    js = smartctl(device, ["-H", "-A", "-i"], 120, "Reading SMART through a USB case needs admin rights.",
-                  run, is_root, is_block)
+    js = smartctl(device, ["-H", "-A", "-i"], 120, needs_admin_words(device, usb), run, is_root, is_block)
     if "ata_smart_attributes" not in js and "nvme_smart_health_information_log" not in js:
         errors = errors_of(js)
-        raise ValueError("This drive gives no SMART data through its USB case."
+        where = "through its USB case" if (on_usb(device) if usb is None else usb) else "to smartctl"
+        raise ValueError(f"This drive gives no SMART data {where}."
                          + (f" (smartctl: {errors[0][:160]})" if errors else ""))
     return {k: js[k] for k in KEEP if k in js}

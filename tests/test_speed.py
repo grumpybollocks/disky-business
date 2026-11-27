@@ -145,10 +145,15 @@ class CommandLine(unittest.TestCase):
         self.assertEqual(list(events[-1]["results"]), list(speed.TESTS))
 
     def test_plain_words(self):
+        from disky import safety
         with Folder() as d:
+            on_system = safety.is_system_drive(d)
             code, out = self.run_cli("speed", d, "--size", "64M", "--seconds", "0.2")
         self.assertEqual(code, 0)
-        self.assertEqual([line.split(":")[0] for line in out.splitlines()],
+        lines = out.splitlines()
+        warned = [line for line in lines if line.startswith("This drive runs your system")]
+        self.assertEqual(len(warned), 1 if on_system else 0)     # figures on the system drive vary: it says so
+        self.assertEqual([line.split(":")[0] for line in lines if line not in warned],
                          ["Writing in one go", "Reading in one go", "Small reads, random places",
                           "Small writes, random places"])
 

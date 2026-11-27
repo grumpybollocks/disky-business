@@ -34,12 +34,19 @@ def human(n):
         n /= 1024
 
 
+STOPPED_WORDS = "Stopped. The test files written so far are left in place, so they can be checked or deleted later."
+# Shown after a message on the command line only; the window has buttons for these.
+_COMMAND_HINT = {("test", "stopped"): " Check them: disky verify <folder>   Remove them: disky clean <folder> --yes",
+                 ("write", "stopped"): " Check them: disky verify <folder>   Remove them: disky clean <folder> --yes"}
+
+
 class Printer:
     """Turns events into JSON lines (for the window) or plain words (for people)."""
 
     def __init__(self, as_json, out=None, err=None):
         self.as_json, self.out, self.err = as_json, out or sys.stdout, err or sys.stderr
         self.line_open = False
+        self.mode = None
 
     def __call__(self, ev):
         if self.as_json:
@@ -47,6 +54,8 @@ class Printer:
             self.out.flush()
             return
         kind = ev["event"]
+        if kind == "start":
+            self.mode = ev.get("mode")
         if kind == "phase" and self.line_open:
             self.err.write("\n")
             self.line_open = False
@@ -58,7 +67,7 @@ class Printer:
             self.err.flush()
             self.line_open = True
         elif kind in ("warning", "error"):
-            self._say(ev["message"])
+            self._say(ev["message"] + _COMMAND_HINT.get((self.mode, ev.get("code")), ""))
         elif kind == "blocks" and ev["state"] not in ("written", "good"):
             at = ev.get("first_bad_offset")
             self._say(f"Block {ev['first']}" + ("" if at is None else f" (at {human(at)})") + f": {ev['state']}")
@@ -74,8 +83,24 @@ class Printer:
             pct = 100 * ev["fragmented_files"] / ev["files"] if ev["files"] else 0
             self._say(f"{ev['fragmented_files']} of {ev['files']} files are in more than one piece ({pct:.1f} %), "
                       f"holding {human(ev['fragmented_bytes'])} of {human(ev['file_bytes'])}.")
+            if ev.get("shared_files"):
+                self._say(f"{ev['shared_files']} of them ({human(ev['shared_bytes'])}) share their data with a "
+                          "snapshot or a copy; defragall leaves them alone, because defragmenting would store them "
+                          "a second time.")
+            if ev.get("skipped"):
+                self._say(f"{ev['skipped']} files could not be read.")
             for w in ev.get("worst", [])[:20]:
-                self._say(f"  {w['pieces']} pieces  {human(w['bytes'])}  {w['path']}")
+                self._say(f"  {w['pieces']} pieces  {human(w['bytes'])}  {w['path']}"
+                          + ("  (shared)" if w.get("shared") else ""))
+        elif kind == "defrag_progress":
+            what = "skipped" if ev["skipped"] else f"{ev['before']} -> {ev['after']} pieces"
+            self._say(f"[{ev['index']}/{ev['total']}] {what}  {ev['path']}")
+        elif kind == "defragall_result":
+            self._say(f"Defragmented {ev['done']} of {ev['files']} files: {ev['pieces_before']} pieces before, "
+                      f"{ev['pieces_after']} after; content checked unchanged."
+                      + (f" Left alone: {ev['shared']} shared with a snapshot or a copy." if ev.get("shared") else "")
+                      + (f" {ev['skipped']} the tool could not do." if ev["skipped"] else "")
+                      + (" Stopped." if ev["stopped"] else ""))
         elif kind == "frag_summary":
             pct = 100 * ev["fragmented_files"] / ev["files"] if ev["files"] else 0
             self._say(f"{ev['fragmented_files']} of {ev['files']} files are in more than one piece ({pct:.1f} %), "
@@ -90,13 +115,6 @@ class Printer:
             self.line_open = True
         elif kind == "selftest_result":
             self._say(f"Self-test ({ev['kind']}): {ev['message']}")
-        elif kind == "defrag_progress":
-            self._say(f"File {ev['index']} of {ev['total']}: " + ("skipped" if ev["skipped"] else
-                      f"{ev['before']} pieces before, {ev['after']} after") + f"  {ev['path']}")
-        elif kind == "defragall_result":
-            self._say(f"{ev['done']} of {ev['files']} files done, {ev['improved']} in fewer pieces, {ev['skipped']} "
-                      f"skipped; {ev['pieces_before']} pieces before, {ev['pieces_after']} after."
-                      + (" Stopped." if ev["stopped"] else ""))
         elif kind in ("smart_data", "smart_deep"):
             self._say(self.smart_words(ev))
         elif kind == "speed_result":
@@ -144,7 +162,9 @@ class Printer:
         if ev["verdict"] == "bad":
             lost = (s["changed"] + s["bad"] + s["overwritten"]) * 512 + ev["missing_bytes"]
             return (f"Drive is BAD. {human(lost)} of {human(ev['bytes_read'] + ev['missing_bytes'])} came back "
-                    f"wrong or missing, first at {human(ev['first_bad_offset'])}. "
+                    "wrong or missing"
+                    + ("" if ev.get("first_bad_offset") is None else f", first at {human(ev['first_bad_offset'])}")
+                    + ". "
                     f"Sectors: {s['bad']} wrong, {s['changed']} slightly changed, {s['overwritten']} overwritten. "
                     + advice.BAD_DRIVE)
         if ev["verdict"] == "not_verified":
@@ -192,6 +212,11 @@ def _defrag(args, emit, stop):
 
 
 def _fragscan(args, emit, stop):
+    if os.path.isdir(args.folder):
+        emit({"event": "error", "code": "not_exfat",
+              "message": f"{args.folder} is a folder. fragscan reads a whole exFAT partition (like /dev/sdX1) or "
+                         "an image file of one. For the files in a folder use: disky fragfiles <folder>"})
+        return 3
     if not _is_block_device(args.folder) and mounts.holding(args.folder)[1] in frag.HANDS_OFF:
         emit({"event": "error", "code": "not_supported",
               "message": "Files on NTFS drives are not read: Linux may change a damaged NTFS drive just by reading it."})
@@ -231,6 +256,9 @@ def _speed(args, emit, stop):
     if safety.is_system_drive(args.folder):
         vfs = os.statvfs(args.folder)
         keep = safety.system_reserve(vfs.f_blocks * vfs.f_frsize)
+        emit({"event": "warning", "code": "system_drive",
+              "message": "This drive runs your system: programs reading and writing at the same time lower the "
+                         "figures, so they can differ from run to run. Run it twice to compare."})
     results = speed.run(args.folder, emit, size=args.size, seconds=args.seconds, stop=stop, keep_free=keep)
     emit({"event": "done", "results": results, "stopped": stop.is_set()})
     return 130 if stop.is_set() else 0
@@ -269,8 +297,7 @@ def _fill(args, emit, stop):
         if args.cmd == "write" or stop.is_set():
             emit({"event": "done", "written_bytes": written, "stopped": stop.is_set()})
             if stop.is_set():
-                emit({"event": "warning", "code": "stopped", "message": Printer.verdict(
-                    {"verdict": "stopped", "sectors": {}})})
+                emit({"event": "warning", "code": "stopped", "message": STOPPED_WORDS})
             return 130 if stop.is_set() else 0
     summary = engine.verify(args.folder, emit, expect_bytes=written, stop=stop)
     return EXIT[summary["verdict"]]

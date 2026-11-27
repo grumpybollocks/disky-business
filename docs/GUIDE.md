@@ -39,7 +39,9 @@ Your own files are never overwritten or deleted. On the drive your system runs f
 Press **Start**. One 1 GiB file is written, measured four ways (reading and writing in one go, and many small
 reads and writes in random places) and removed again. The four results are shown big, each with a bar; the
 graph below shows the speed along the file. Bars grow on a ten-fold scale, so a slow and a fast result both
-stay visible.
+stay visible. On the drive your system runs from, other programs read and write at the same time, so the
+figures can differ from run to run (the app says so); run it twice to compare. On a quiet drive two runs agree
+within a few percent.
 
 ## SMART: the drive's own health record
 
@@ -50,7 +52,14 @@ listed first, problems in red; **Show all items** lists the rest.
 - **Short self-test** (a few minutes) and **Long self-test** (can take hours): the drive tests itself. Both
   only read. The system asks for the admin password.
 - A drive in a USB case often shows nothing. **Read with admin password** reads it another way (with `smartctl`).
+  USB sticks and memory cards keep no health record at all: the **Test** tab is the way to check them.
 - "Cable errors" usually means the cable or connector, not the drive.
+- **Head parkings** and **Motor starts**: hard disks are rated for a set number. When the drive's own score comes
+  within reach of its limit, the item turns into a warning ("Near its rated limit").
+- Some makers pack several counts into one number or count every operation in their "error rate" items
+  (Seagate). Those are shown decoded or explained, not as alarming raw numbers.
+- Amounts of data written and read are shown for NVMe drives. For SATA drives the system's figure uses one
+  formula for every maker and is often wrong, so it is left out; the **Deep scan** reads the real one.
 
 **Deep scan** reads everything the drive knows about itself (it only reads; admin password). A window opens:
 
@@ -74,6 +83,17 @@ be unchanged. **Stop** ends it after the file in hand. exFAT is scanned only (th
 (NTFS) drives are not scanned or defragmented: Linux has no tool for that which can be trusted, and Windows
 does it by itself.
 
+On btrfs:
+
+- **Compressed files** (`compress=` mount option) are stored in 128 KiB pieces that lie one after another. They
+  are counted as one piece, not one per 128 KiB, so a compressed file is not called fragmented for nothing.
+- **Files shared with a snapshot or a copy** (Timeshift, Snapper, `cp --reflink`) are listed but never
+  defragmented: defragmenting unshares them, and their data would be stored a second time. The scan says how many
+  there are, and "Defragment all" offers only the others.
+- If a file's content changes while it is being defragmented, the run stops at once and nothing more is
+  touched. The message says whether another program was most likely writing to it (close it and run again) or
+  the system's tool changed it (stop using it on that drive).
+
 ## Care: check, repair, trim
 
 Pick a partition. It must be unmounted first (**Unmount**, on the left).
@@ -83,7 +103,8 @@ Pick a partition. It must be unmounted first (**Unmount**, on the left).
   still can; a repair can remove damaged files, and it cannot be stopped once started.
 - Windows (NTFS) partitions are not repaired here; use Windows' own disk check.
 - **Trim this drive** tells an SSD which space is free, for every mounted file system on it. Linux does this
-  weekly by itself, so it is rarely needed, and most USB cases do not pass it on.
+  weekly by itself, so it is rarely needed, and most USB cases do not pass it on. A file system mounted with
+  the `discard` option (btrfs `discard=async`, for example) trims as files are deleted; the tab says so.
 
 ## When a drive cannot be used
 
