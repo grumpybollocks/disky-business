@@ -86,8 +86,10 @@ class Window(unittest.TestCase):
         self.assertIn("MiB/s", tab.progress.left.text())
         self.assertEqual(tab.progress.percent.text(), f"{tab.progress.bar.value()} %")
         tab.go.click()
+        self.assertEqual(tab.progress.title.text(), "Stopping...")          # the stop is seen at once
         self.wait(lambda: tab.mode is None, 3.0)
         self.assertIsNot(tab.stack.currentWidget(), tab.progress)          # gone when the test is over
+        self.assertEqual(tab.progress.stopping, "")                         # the next run starts clean
         self.assertFalse(tab.runner.running())
         self.assertEqual(self.shown(tab)[0], "Stopped.")
 
@@ -275,6 +277,15 @@ class Window(unittest.TestCase):
         self.assertEqual((tab.go.text(), tab.check.text(), tab.remove.text()),
                          ("Start test", "Check test files again", "Delete test files"))
 
+    def test_a_phase_of_unknown_size_shows_a_moving_bar_not_0_percent(self):
+        tab = self.open("good")
+        tab.mode = "test"
+        tab.on_event({"event": "phase", "phase": "verify", "total_bytes": None, "free_bytes": None})
+        self.assertEqual((tab.progress.bar.maximum(), tab.progress.percent.text()), (0, ""))
+        tab.on_event({"event": "phase", "phase": "verify", "total_bytes": 100, "free_bytes": None})
+        self.assertEqual((tab.progress.bar.maximum(), tab.progress.percent.text()), (100, "0 %"))
+        tab.mode = None
+
     def test_progress_line_shows_how_far_or_that_it_is_not_known(self):
         from diskygui.tabbase import ProgressLine
         line = ProgressLine()
@@ -285,6 +296,9 @@ class Window(unittest.TestCase):
         self.assertEqual((line.bar.value(), line.percent.text()), (100, "100 %"))       # never past the end
         line.show_progress("Starting", None)
         self.assertEqual((line.bar.minimum(), line.bar.maximum(), line.percent.text()), (0, 0, ""))   # not known yet
+        line.show_stopping("Stopping...")
+        line.show_progress("Checking", 40)
+        self.assertEqual((line.title.text(), line.bar.value()), ("Stopping...", 40))     # Stop stays said
         from diskygui.chrome import stylesheet
         for theme in THEMES.values():
             self.assertIn("QProgressBar::chunk", stylesheet(theme), theme.name)        # styled in every look

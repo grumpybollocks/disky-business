@@ -9,8 +9,9 @@ from PySide6.QtWidgets import (QAbstractItemView, QCheckBox, QFrame, QHBoxLayout
                                QTableWidget, QTableWidgetItem, QVBoxLayout)
 
 from . import smart
+from .deepview import DeepView
 from .defragtab import admin_wrap
-from .tabbase import ProgressLine, TabBase
+from .tabbase import TabBase
 
 ABOUT = ("SMART is the drive's own record of its health: errors, wear, hours and temperature. Reading it changes "
          "nothing on the drive. Score is the drive's own mark for an item (higher is better); the item fails "
@@ -41,7 +42,8 @@ class SmartTab(TabBase):
         self.read_smart = smart.read                    # replaced in tests
         self.wrap = admin_wrap                          # the password prompt; replaced in tests
         self.by_password = {}                           # drive -> rows read with smartctl in this session
-        self.asked_drive = self.usb_data = None
+        self.asked_drive = self.usb_data = self.deep_data = None
+        self.deep_view = None
         self.rows = []
         about = QLabel(ABOUT)
         about.setWordWrap(True)
@@ -95,12 +97,16 @@ class SmartTab(TabBase):
         self.test_status = QLabel("")
         self.test_status.setObjectName("status")
         self.test_status.setWordWrap(True)
-        self.test_progress = ProgressLine()             # shown while a self-test runs
+        self.test_progress = self.progress_line()             # shown while a self-test runs
         self.test_progress.hide()
         self.test_result = None
         self.usb_button = QPushButton("Read with admin password")
         self.usb_button.setToolTip("For drives in USB cases: reads the SMART record with smartctl. Only reads")
         self.usb_button.clicked.connect(self.read_with_password)
+        self.deep_button = QPushButton("Deep scan")
+        self.deep_button.setToolTip("Everything the drive knows about itself: maker, firmware, past errors, "
+                                    "self-test history, lifetime statistics. Only reads")
+        self.deep_button.clicked.connect(self.deep_scan)
         bottom = QHBoxLayout()
         bottom.addWidget(self.show_all)
         words = QVBoxLayout()
@@ -110,6 +116,7 @@ class SmartTab(TabBase):
         for b in (self.short_button, self.long_button, self.stop_button):
             bottom.addWidget(b)
         bottom.addWidget(self.usb_button)
+        bottom.addWidget(self.deep_button)
         bottom.addWidget(self.again)
         right = QVBoxLayout()
         right.addWidget(about)
@@ -194,6 +201,24 @@ class SmartTab(TabBase):
             self.set_busy("smart")
             self.runner.start("smart", d.device, wrap=self.wrap())
 
+    def deep_scan(self):
+        d = self.panel.current_drive()
+        if d is None or not d.device or self.mode is not None:
+            return
+        if self.confirm(f"Deep scan of {d.model}?\nIt reads everything the drive knows about itself: identity, "
+                        "firmware, past errors, self-test history and lifetime statistics. It only reads and "
+                        "takes a few seconds. " + self.password_words()):
+            self.error = self.deep_data = None
+            self.asked_drive = d
+            self.detail.setText("Deep scan...")
+            self.set_busy("deep")
+            self.runner.start("smart", d.device, "--deep", "--serial", wrap=self.wrap())
+
+    def open_deep(self, drive, data):
+        """Show the result in its own window (replaced in tests)."""
+        self.deep_view = DeepView(drive.model, data, drive.device, self)
+        self.deep_view.show()
+
     def short_test(self):
         self.start_test("short", "It takes a few minutes.")
 
@@ -216,6 +241,7 @@ class SmartTab(TabBase):
     def stop_test(self):
         if self.mode == "selftest":
             self.test_status.setText("Stopping the self-test...")
+            self.test_progress.show_stopping("Stopping the self-test...")
             self.runner.stop()
 
     def on_event(self, ev):
@@ -225,6 +251,8 @@ class SmartTab(TabBase):
                                              "the drive is testing itself", "")
         elif ev.get("event") == "selftest_result":
             self.test_result = ev
+        elif ev.get("event") == "smart_deep":
+            self.deep_data = ev.get("data") or {}
         elif ev.get("event") == "smart_data":
             self.usb_data = ev.get("data") or {}
         elif ev.get("event") == "error":
@@ -245,6 +273,22 @@ class SmartTab(TabBase):
             self.test_status.setText(words)
             return
         d, problem = self.asked_drive, ""
+        if self.mode == "deep":
+            if crash:
+                problem = "It did not finish. " + crash
+            elif self.error:
+                problem = self.error
+            elif code in (126, 127):
+                problem = "Not read: the admin password was not given."
+            elif self.deep_data is None or d is None:
+                problem = f"Ended without a result (exit {code})."
+            self.set_busy(None)
+            self.load()
+            if problem:
+                self.detail.setText("Deep scan: " + problem)
+            else:
+                self.open_deep(d, self.deep_data)
+            return
         if crash:
             problem = "It did not finish. " + crash
         elif self.error:
@@ -272,6 +316,8 @@ class SmartTab(TabBase):
         self.short_button.setEnabled(self.mode is None)
         self.long_button.setEnabled(self.mode is None)
         self.usb_button.setEnabled(self.mode is None)
+        self.deep_button.setVisible(bool(d and d.device))
+        self.deep_button.setEnabled(self.mode is None)
         self.again.setEnabled(self.mode is None and self.panel.current_drive() is not None)
         self.panel.set_busy(self.mode is not None)
 

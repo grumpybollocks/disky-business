@@ -22,7 +22,7 @@ from .caretab import CareTab
 from .defragtab import DefragTab
 from .smarttab import SmartTab
 from .speedtab import SpeedTab
-from .tabbase import ProgressLine, TabBase
+from .tabbase import TabBase
 from .icons import dress
 from .theme import DEFAULT_THEME, THEMES, default_theme
 
@@ -116,7 +116,7 @@ class TestTab(TabBase):
         self.stack.addWidget(self.status)
         self.stack.addWidget(self.verdict)
         self.stack.addWidget(self.plan)
-        self.progress = ProgressLine()                  # a running test: bar, speed, time left
+        self.progress = self.progress_line()                  # a running test: bar, speed, time left
         self.stack.addWidget(self.progress)
         self.stack.setFixedHeight(84)
 
@@ -178,6 +178,7 @@ class TestTab(TabBase):
     def start_or_stop(self):
         if self.mode in RUNS:
             self.status.setText("Stopping...")
+            self.progress.show_stopping()
             self.runner.stop()
         elif self.mode is None and self.folder:
             self._begin("test")
@@ -215,7 +216,7 @@ class TestTab(TabBase):
             self.phase = PHASES.get(ev.get("phase"), "Working")
             self.status.setText(self.phase + "...")
             if self.mode in RUNS:
-                self.progress.show_progress(self.phase + "...", 0)
+                self.progress.show_progress(self.phase + "...", 0 if ev.get("total_bytes") else None)
                 self.stack.setCurrentWidget(self.progress)
         elif kind == "progress" and self.mode in RUNS:
             parts = [self.phase or "Working"]
