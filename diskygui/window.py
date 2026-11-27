@@ -22,7 +22,7 @@ from .caretab import CareTab
 from .defragtab import DefragTab
 from .smarttab import SmartTab
 from .speedtab import SpeedTab
-from .tabbase import TabBase
+from .tabbase import ProgressLine, TabBase
 from .icons import dress
 from .theme import DEFAULT_THEME, THEMES, default_theme
 
@@ -116,6 +116,8 @@ class TestTab(TabBase):
         self.stack.addWidget(self.status)
         self.stack.addWidget(self.verdict)
         self.stack.addWidget(self.plan)
+        self.progress = ProgressLine()                  # a running test: bar, speed, time left
+        self.stack.addWidget(self.progress)
         self.stack.setFixedHeight(84)
 
         self.plan_of = test_plan                        # replaced in tests
@@ -212,6 +214,9 @@ class TestTab(TabBase):
         if kind == "phase":
             self.phase = PHASES.get(ev.get("phase"), "Working")
             self.status.setText(self.phase + "...")
+            if self.mode in RUNS:
+                self.progress.show_progress(self.phase + "...", 0)
+                self.stack.setCurrentWidget(self.progress)
         elif kind == "progress" and self.mode in RUNS:
             parts = [self.phase or "Working"]
             if ev.get("total_bytes"):
@@ -219,6 +224,11 @@ class TestTab(TabBase):
             parts.append(f"{ev.get('mib_per_s', 0):.0f} MiB/s")
             parts.append(time_text(ev.get("eta_s")))
             self.status.setText("     ".join(p for p in parts if p))
+            total = ev.get("total_bytes")
+            self.progress.show_progress(
+                self.phase or "Working", 100 * ev["done_bytes"] / total if total else None,
+                f"{ev.get('mib_per_s', 0):.0f} MiB/s", time_text(ev.get("eta_s")) or "")
+            self.stack.setCurrentWidget(self.progress)
         elif kind == "warning":
             self.tip(ev.get("message", ""))
         elif kind == "error":

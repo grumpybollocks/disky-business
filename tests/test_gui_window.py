@@ -80,8 +80,13 @@ class Window(unittest.TestCase):
         self.wait(lambda: "Writing" in tab.status.text() and "MiB/s" in tab.status.text())
         self.assertEqual(tab.go.text(), "Stop test")
         self.assertFalse(tab.remove.isEnabled())
+        self.assertIs(tab.stack.currentWidget(), tab.progress)             # a bar, not a line of text
+        self.assertEqual(tab.progress.title.text(), "Writing")
+        self.assertIn("MiB/s", tab.progress.left.text())
+        self.assertEqual(tab.progress.percent.text(), f"{tab.progress.bar.value()} %")
         tab.go.click()
         self.wait(lambda: tab.mode is None, 3.0)
+        self.assertIsNot(tab.stack.currentWidget(), tab.progress)          # gone when the test is over
         self.assertFalse(tab.runner.running())
         self.assertEqual(self.shown(tab)[0], "Stopped.")
 
@@ -268,6 +273,20 @@ class Window(unittest.TestCase):
             self.assertIn("already holds 1 Disky test file from", tab.plan.text())
         self.assertEqual((tab.go.text(), tab.check.text(), tab.remove.text()),
                          ("Start test", "Check test files again", "Delete test files"))
+
+    def test_progress_line_shows_how_far_or_that_it_is_not_known(self):
+        from diskygui.tabbase import ProgressLine
+        line = ProgressLine()
+        line.show_progress("Checking", 30.6, "61 MiB/s", "25 min left")
+        self.assertEqual((line.title.text(), line.bar.value(), line.percent.text(), line.left.text(), line.right.text()),
+                         ("Checking", 30, "30 %", "61 MiB/s", "25 min left"))
+        line.show_progress("Checking", 250)
+        self.assertEqual((line.bar.value(), line.percent.text()), (100, "100 %"))       # never past the end
+        line.show_progress("Starting", None)
+        self.assertEqual((line.bar.minimum(), line.bar.maximum(), line.percent.text()), (0, 0, ""))   # not known yet
+        from diskygui.chrome import stylesheet
+        for theme in THEMES.values():
+            self.assertIn("QProgressBar::chunk", stylesheet(theme), theme.name)        # styled in every look
 
 if __name__ == "__main__":
     unittest.main()
