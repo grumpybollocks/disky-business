@@ -65,6 +65,7 @@ class Window(unittest.TestCase):
     def test_bad_names_the_block_and_the_map_shows_it(self):
         tab = self.run_to_end("bad")
         self.assertEqual(self.shown(tab)[0], "Drive is bad: 1 block, first at 57.0 MiB.")
+        self.assertIn("another port and another cable", self.shown(tab)[1])   # H2testw's advice
         tab.map.refresh()
         bad = [i for i, s in enumerate(tab.map._shown.tolist()) if s == mm.BAD]
         self.assertEqual({tab.map.blocks_of(i)[0] for i in bad}, {57})          # only block 57, and it is shown
