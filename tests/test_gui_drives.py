@@ -67,6 +67,32 @@ class Parse(unittest.TestCase):
                          ["EXAMPLE USB HDD", "EXAMPLE USB SSD", "EXAMPLE HDD 4T", "EXAMPLE NVME 2TB", "EXAMPLE NVME 1TB",
                           "EXAMPLE SSD 240G"])     # removable first, then by size; no DVD, no loop device
 
+    def test_nvme_with_no_drive_size_takes_it_from_its_namespace(self):
+        # Real udisks2 answer (Manjaro, 2026-11-27): the NVMe Drive says Size 0, its nvme0n1 block has the size.
+        # Empty card readers say Size 0 everywhere and stay hidden.
+        answer = {"data": [{
+            D + "nvme0": drive("KINGSTON EXAMPLE 500G", 0, NVMe_Controller={"SmartUpdated": 1}),
+            D + "reader": drive("Generic MassStorageClass", 0, bus="usb"),
+            B + "nvme0n1": block("nvme0", 500_107_862_016, ""),
+            B + "sde": block("reader", 0, ""),
+        }]}
+        found = dr.parse(answer)
+        self.assertEqual([(x.model, x.size, x.device, x.smart) for x in found],
+                         [("KINGSTON EXAMPLE 500G", 500_107_862_016, "nvme0n1", "nvme")])
+
+    def test_a_usb_stick_is_called_a_stick_not_a_hard_disk(self):
+        # Real answer for a Kingston DataTraveler 3.0 (2026-11-27): RotationRate -1 like a spinning disk of
+        # unknown speed, but Media "thumb". Card readers give flash_sd and the like.
+        stick = drive("DataTraveler 3.0", 61_904_781_312, rpm=-1, bus="usb")
+        stick[P + "Drive"].update({"Media": v("thumb"), "MediaCompatibility": v(["thumb"])})
+        card = drive("SD Card Reader", 31_914_983_424, rpm=-1, bus="usb")
+        card[P + "Drive"].update({"Media": v("flash_sd"), "MediaCompatibility": v(["flash_sd"])})
+        found = {x.model: x for x in dr.parse({"data": [{D + "stick": stick, D + "card": card}]})}
+        self.assertEqual(found["DataTraveler 3.0"].kind_text(), "USB stick")
+        self.assertEqual(found["SD Card Reader"].kind_text(), "Memory card")
+        self.assertEqual(found["DataTraveler 3.0"].label, "62 GB  USB stick\nDataTraveler 3.0")
+        self.assertFalse(found["DataTraveler 3.0"].spinning)
+
     def test_kind_and_label(self):
         self.assertEqual({m: x.kind_text() for m, x in self.d.items()},
                          {"EXAMPLE USB HDD": "USB HDD", "EXAMPLE USB SSD": "USB SSD", "EXAMPLE HDD 4T": "HDD", "EXAMPLE NVME 2TB": "NVMe",

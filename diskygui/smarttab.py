@@ -152,6 +152,10 @@ class SmartTab(TabBase):
                 # The health box said "no health data"; now there is some.
                 self.panel.health.setText("\n".join(["Read with the admin password:"]
                                                     + (smart.brief(self.rows) or ["No warnings."])))
+            elif d.flash:
+                self.rows, msg = [], smart.NO_SMART_STICK + (
+                    " If this is really a drive in a USB case, \"Read with admin password\" tries smartctl."
+                    if d.device else "")
             else:
                 self.rows, msg = [], smart.NO_SMART + (
                     " \"Read with admin password\" reads it with smartctl instead." if d.device else "")

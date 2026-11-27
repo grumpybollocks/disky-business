@@ -300,7 +300,10 @@ def verify(folder, emit, expect_bytes=None, drop_cache=True, file_bytes=GIB, sto
                             {n: int(tally[i]) for i, n in enumerate(pattern.STATE_NAMES)}, bad_at)
                 if run_first is not None:
                     _blocks(emit, "verify", run_first, run_len, "good")
-                missing += len(buf) - whole          # a torn sector at the end of a file
+                if len(buf) != whole:                # a torn sector at the end of a file
+                    missing += len(buf) - whole
+                    if first_bad is None:
+                        first_bad = base + pos + whole
                 pos += len(buf)
                 read_total += len(buf)
                 prog.add(len(buf))
@@ -315,8 +318,10 @@ def verify(folder, emit, expect_bytes=None, drop_cache=True, file_bytes=GIB, sto
         finally:
             os.close(fd)
     prog.add(0, force=True)
-    if expect_bytes is not None and read_total < expect_bytes:
+    if expect_bytes is not None and read_total < expect_bytes and not stop.is_set():
         missing = max(missing, expect_bytes - read_total)
+        if first_bad is None:                       # the data ends early: the loss starts where it ends
+            first_bad = (files[-1][0] * file_bytes + os.path.getsize(files[-1][1])) if files else 0
     counter_end = _read_bytes_counter()
     pct = None
     if counter_start is not None and counter_end is not None and read_total:

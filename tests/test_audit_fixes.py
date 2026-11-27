@@ -9,6 +9,7 @@ import tempfile
 import threading
 import time
 import unittest
+from pathlib import Path
 from unittest import mock
 
 from disky import cli, engine, exfat, frag, mounts, proc, safety, trim
@@ -152,7 +153,7 @@ class Engine(unittest.TestCase):
             orig = os.path.lexists
             # Another program makes the file just after the first look.
             with mock.patch.object(speed.os.path, "lexists",
-                                   lambda p: (orig(p), open(theirs, "w").write("theirs"))[0]):
+                                   lambda p: (orig(p), Path(theirs).write_text("theirs"))[0]):
                 with self.assertRaises(Exception):
                     speed.run(folder, lambda e: None, size=1 << 20, seconds=0.1)
             with open(theirs) as f:

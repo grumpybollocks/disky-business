@@ -99,8 +99,12 @@ class TrimTab(TabBase):
         elif f["supported"]:
             self.answer.setText("This drive accepts TRIM.")
             where = ", ".join(self.targets)
-            self.detail.setText(f"\"Trim this drive\" tells it which space is free ({where}). Files are not "
-                                "touched. It needs admin rights.")
+            text = (f"\"Trim this drive\" tells it which space is free ({where}). Files are not touched. It "
+                    "needs admin rights.")
+            if f.get("auto_discard"):
+                text += (" It is mounted with continuous TRIM (the discard option), so the drive already hears "
+                         "about freed space as files are deleted; this is rarely needed.")
+            self.detail.setText(text)
         else:
             self.answer.setText("This drive does not accept TRIM.")
             self.detail.setText("Spinning disks have no use for it. Many USB cases do not pass it on to the SSD "
