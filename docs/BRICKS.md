@@ -24,7 +24,9 @@ To add something, write the piece and put it in the table; no other file changes
 | TRIM | `disky/trim.py` | folder | `trim_info`, `trim_result` (runs `fstrim` only with root and only if the drive accepts it) | `tests/test_trim.py` |
 | Mount table | `disky/mounts.py` | path | its mount point, file system, device; mounts below a folder (paths decoded as the kernel encodes them) | `tests/test_audit_fixes.py` |
 | Stoppable tool | `disky/proc.py` | a system tool's command | its output; ends it on Stop or time-out (`.ended`) | `tests/test_audit_fixes.py` |
-| SMART by smartctl | `disky/smartread.py` | a drive name | `smart_data` (admin rights; read-only; name checked strictly; no serial number passed on) | `tests/test_smartread.py` |
+| SMART by smartctl | `disky/smartread.py` | a drive name | `smart_data` (admin rights; read-only; name checked strictly; no serial number passed on). `smartctl()` holds the checks every smartctl call with admin rights goes through | `tests/test_smartread.py` |
+| Deep scan | `disky/smartdeep.py` | a drive name, `--serial` | `smart_deep`: smartctl -x sections named in `KEEP`, `maker` from the maker list, `production_date` (null); serial only when asked, the unique part of the world-wide name never | `tests/test_smartdeep.py` |
+| Bad-drive advice | `disky/advice.py` | — | the sentence shown with "Drive is bad", by the command line and the window | `test_cli_safety.py`, `test_gui_window.py` |
 | SMART self-test | `disky/selftest.py` | a drive name, short or long | `selftest_progress`, `selftest_result`; Stop aborts the test | `tests/test_selftest.py` |
 | Check and repair | `disky/fscare.py` | a partition name | `fs_result` (through the drive service; never mounted partitions, never NTFS) | `tests/test_fscare.py` |
 | Admin helper | `disky/helper.py` `ALLOWED` | request lines | the listed jobs, one at a time; `helper_done` after each | `tests/test_helper.py` |
@@ -52,6 +54,8 @@ add its events to `contract.EVENTS` and its mode to `contract.MODES`, describe t
 | Drive list | `diskygui/drives.py` | — | `read()` -> list of `Drive` (no Qt, no root) | `test_gui_drives.py` |
 | Engine runner | `diskygui/runner.py` | — | `start(mode, target, *options, wrap=())`; signals `event`, `problem`, `finished` | `test_gui_window.py` |
 | SMART reader | `diskygui/smart.py` | `PLAIN` | `read(drive)` -> rows (plain name, value, status, what it means, main or not, the drive's score) from the drive service; no Qt, no root. One `PLAIN` entry gives an item plain words | `test_gui_smart.py` |
+| Deep-scan words | `diskygui/deepcard.py` | `CARDS`, `STATISTICS`, `LINK_NAMES` | `identity(data)`, `history(data)` -> (title, lines, meaning), `report(...)`; no Qt. One `CARDS` entry adds a history card; one `STATISTICS` entry shows one more lifetime figure in plain words | `test_gui_deep.py` |
+| Deep-scan window | `diskygui/deepview.py` | — | the cards, "Show serial number", "Save report..." | `test_gui_deep.py` |
 | SMART names | `diskygui/smartdb.py` | — | `names(model)` -> {item number: name} from smartmontools' drive list, first matching family on top of DEFAULT, as smartctl does | `test_gui_smart.py` |
 | Map model | `diskygui/mapmodel.py` | — | block states and the rule that groups them into squares (no Qt) | `test_gui_map.py` |
 | Map widget | `diskygui/mapwidget.py` | — | draws a model in a theme and block style; `square_at`, `blocks_of` are ready for clicking | `test_gui_map.py` |

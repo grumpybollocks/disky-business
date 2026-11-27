@@ -14,11 +14,13 @@ Linux only. Works, not yet released.
 |---|---|
 | **Test** | Fills the free space, reads it back from the drive (not from memory) and gives a plain verdict. Finds fake-capacity sticks and bad blocks. Uses the f3 / H2testw method and file format |
 | **Speed** | Sequential and small random reads and writes: four big results with bars, and a graph of the speed along the file |
-| **SMART** | The drive's own health record in plain words: worn-out spots, unreadable spots, cable errors, life left, temperature. Short and long self-tests. Drives in USB cases are read with `smartctl` after asking |
+| **SMART** | The drive's own health record in plain words: worn-out spots, unreadable spots, cable errors, life left, temperature. Short and long self-tests. Drives in USB cases are read with `smartctl` after asking. **Deep scan**: maker, firmware, past errors, self-test history, lifetime statistics and a text report |
 | **Defrag** | How fragmented the files are. "Defragment all" works through every fragmented file on btrfs, ext4 and XFS with the system's own tool, and proves after each that its content is unchanged |
 | **Care** | Checks a partition's file system and repairs it with the system's own tool, after showing the warnings that apply. "Trim this drive" for SSDs that accept it |
 
 ![The SMART tab in plain words (example drive)](docs/screenshots/smart.png)
+
+![Deep scan: identity and history of a drive (example drive)](docs/screenshots/deep.png)
 
 Five looks: Modern light and Modern dark (following your system), Windows 98 style, Dark and Deep violet.
 
@@ -41,6 +43,7 @@ Five looks: Modern light and Modern dark (following your system), Windows 98 sty
 | 500 GB hard disk in a USB case | 360 GiB of free space, written and read back: good, 5 h; the files already on it untouched |
 | Internal NVMe | TRIM through the window: 140 GiB trimmed |
 | 7 internal drives | SMART read and explained; item names match `smartctl` |
+| SATA SSD, SATA hard disk, NVMe, two drives in USB cases | Deep scan read by `disky smart --deep`; one drive's three logged errors shown |
 
 Test files are read correctly by `f3read` 8.0, and `f3write` 8.0's files by Disky Business.
 
