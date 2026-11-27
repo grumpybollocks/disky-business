@@ -240,6 +240,17 @@ class Window(unittest.TestCase):
         self.assertGreaterEqual(window.TIP_SECONDS, 25)
         self.assertEqual(tab.window()._timer.interval(), window.TIP_SECONDS * 1000)
 
+    def test_a_message_from_one_tab_does_not_follow_to_the_next(self):
+        from disky import tips
+        tab = self.open("good")
+        win = tab.window()
+        win.show_tip("This drive runs your system: figures vary.")
+        win.tabs.setCurrentIndex(2)                          # SMART: the speed message means nothing here
+        self.assertIn(win.tip_line.text(), tips.TIPS)
+        win.show_tip("A message for this tab.")
+        win.tabs.setCurrentIndex(2)                          # the same tab: it stays
+        self.assertEqual(win.tip_line.text(), "A message for this tab.")
+
     def test_the_app_has_an_icon_and_names_its_menu_entry(self):
         from PySide6.QtGui import QIcon
         from diskygui import __main__ as start

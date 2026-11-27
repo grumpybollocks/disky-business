@@ -389,6 +389,9 @@ class MainWindow(QMainWindow):
             self.tabs.blockSignals(False)
             return
         self.pages[index].panel.adopt(self.pages[self._tab].panel)
+        if self._held and index != self._tab:           # a message from the last tab means nothing on this one
+            self._held = False
+            self.next_tip()
         self._tab = index
 
     def on_admin(self, is_open):

@@ -34,6 +34,8 @@ Five looks: Modern light and Modern dark (following your system), Windows 98 sty
   the app (or press "End") and runs only Disky's own fixed jobs. Most things need no password at all.
 - Stop works at any moment (a repair, once started, is left to finish).
 - Mount, Unmount and Safely remove are in the drive list; the system and home partitions are never unmounted.
+- Never defragments a file that shares its data with a btrfs snapshot or a copy (it would be stored twice), and
+  does not call compressed btrfs files fragmented because they are stored in 128 KiB pieces.
 
 ## Tested on real drives
 
@@ -44,6 +46,10 @@ Five looks: Modern light and Modern dark (following your system), Windows 98 sty
 | Internal NVMe | TRIM through the window: 140 GiB trimmed |
 | 7 internal drives | SMART read and explained; item names match `smartctl` |
 | SATA SSD, SATA hard disk, NVMe, two drives in USB cases | Deep scan read by `disky smart --deep`; one drive's three logged errors shown |
+| btrfs home (zstd compression, Timeshift snapshots) | 56 031 files scanned in 3 s; 1 262 snapshot-shared files left alone (25.9 GiB not stored twice); a fragmented file defragmented from 64 pieces to 1, content unchanged |
+| Real test files damaged on purpose (2.1 GiB) | A flipped bit, a zeroed sector, data from another place (fake capacity), a missing file, a short file and a torn file: each found, with its place |
+| SATA SSD, speed test twice | 382 MiB/s write and 522 MiB/s read both times |
+| NVMe, 3 SATA SSDs, a 2 TB hard disk, a USB stick | All listed (NVMe too) and SMART explained; a hard disk's worn head parking (score 1) flagged; its packed timeout count shown as 32, not 4 296 933 408 |
 
 Test files are read correctly by `f3read` 8.0, and `f3write` 8.0's files by Disky Business.
 
