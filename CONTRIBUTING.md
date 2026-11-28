@@ -32,12 +32,21 @@ scheme or an engine command is one entry ([docs/BRICKS.md](docs/BRICKS.md)).
 
 ## Known limits
 
-- Before a check or repair, the Maintenance tab reads the drive list again, and that still waits for the system
-  for a moment. (Picking a drive, the Test tab's plan, the SMART table, Mount, Unmount, Safely remove and the
-  health box no longer do: a slow or failing drive cannot hold up the window there.)
-- A long self-test keeps the app busy until it ends or is stopped.
+- A long self-test keeps the app busy until it ends or is stopped, and the other tabs cannot be opened meanwhile.
 - Self-tests are not offered for drives in USB cases.
+- No keyboard shortcuts yet (refresh, stop, quit).
+- The Speed tab shows no progress bar or time left.
+- A check's result does not name its partition, and after a repair the next repair question still quotes the
+  earlier check.
+- Deep scan is offered for sticks and cards, which have no SMART record to read.
+- Button names differ a little between tabs (Start test, Start, Scan; Read again, Refresh).
+- Starting a test where test files already exist shows a red "Could not run", which reads like a bad drive.
+- Defragmenting exFAT and NTFS is not offered: no tool for Linux can be trusted with it.
 
 ## Tried on real hardware
 
-Every feature has run on real drives, on one machine. Reports from other machines and drives are welcome.
+Every feature has run on real drives, on one machine: a SATA SSD, SATA hard disks, NVMe drives, and SSDs and
+hard disks in USB cases. The changes of 28 November were run for real without admin rights (test, speed,
+mount, unmount, fault injection); the jobs behind the password (trim, deep scan, self-test, exFAT scan) ran for
+real on the days before and are covered by automated tests since. Reports from other machines and drives are
+welcome.

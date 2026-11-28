@@ -54,19 +54,26 @@ Five looks: Modern light and Modern dark (following your system), Windows 98 sty
 
 Test files are read correctly by `f3read` 8.0, and `f3write` 8.0's files by Disky Business.
 
-## Latest changes (27 November 2026)
+## Latest changes (28 November 2026)
 
-- **Deep scan**: a drive's identity, firmware, past errors, self-test history and lifetime statistics in their
-  own window, with a text report. The serial number stays hidden until you ask for it.
-- **NVMe drives** that udisks reports with no size are listed again.
-- **Defragmenting on btrfs** leaves snapshot-shared files alone, stops at once if a file changes under it, and
-  counts compressed files correctly.
-- **SMART explained better**: Seagate's packed counts decoded, worn head parking flagged, air temperature named
-  apart, and a hint when a drive in a USB case needs admin rights.
-- **Clearer words**: a progress bar, advice when a drive is bad, "Stopping..." while Stop works, a warning when
-  the speed test runs on the system drive, and plain words for every command-line result.
-- **Steadier**: background drive reads can no longer bring the window down; a short last test file is reported
-  instead of stopping the check.
+- **Nothing crosses a drive that is being changed**: Check, Repair and Trim wait while a drive is being mounted
+  or unmounted, and a repair runs only on the partition you confirmed, checked once more after your yes.
+- **A slow or failing drive no longer hangs the window**: the drive list, a drive's folder and its SMART record
+  are read in the background.
+- **One odd entry no longer hides the rest**: a device or SMART item the system describes in an unexpected way
+  is left out, and everything else is still shown.
+- **Closing the window during a job asks first**, with a stronger warning during a repair.
+- **TRIM says whether it is needed and why**; the Care tab is now called Maintenance.
+- **Deep scan** (27 November): a drive's identity, firmware, past errors, self-test history and lifetime
+  statistics in their own window, with a text report. The serial number stays hidden until you ask for it.
+
+## How it is tested
+
+About 300 automated tests, run on every change on two Python versions. Each new test is first shown to fail on
+broken code. Beyond that: independent code reviews, random and malformed data thrown at everything that reads
+outside input (drive service, smartctl, mount table, exFAT volumes, the admin helper), thousands of random
+clicks in the window, and faults injected into test files on a real disk, which must be found at the exact spot.
+It has run on one machine so far; see [CONTRIBUTING.md](CONTRIBUTING.md) for what is known to be unfinished.
 
 ## Run it
 
