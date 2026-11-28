@@ -122,10 +122,21 @@ def packs_counts(model):
     return bool(re.match(r"ST\d", (model or "").strip()))
 
 
+def _int(x):
+    return isinstance(x, int) and not isinstance(x, bool)
+
+
+def _whole(attr):
+    """True for an attribute in the shape the drive service documents: nine fields of the right kinds."""
+    return (isinstance(attr, (list, tuple)) and len(attr) == 9 and _int(attr[0]) and isinstance(attr[1], str)
+            and all(_int(x) for x in attr[2:8]))
+
+
 def ata_rows(attrs, names=None, packed=False):
     """attrs = list of (id, name, flags, value, worst, threshold, pretty, pretty_unit, expansion).
     names = {id: name} from smartmontools' drive list, which wins over the service's own names."""
-    names = names or {}
+    names = names if isinstance(names, dict) else {}
+    attrs = [a for a in attrs if _whole(a)] if isinstance(attrs, (list, tuple)) else []   # a broken one is left out
     rows, used = [], set()
     for ident, name, flags, value, worst, thresh, pretty, unit, _ in attrs:
         known = names.get(ident) or ("" if name.startswith("attribute-") else name)
@@ -179,6 +190,13 @@ def _c(kelvin):
 
 def nvme_rows(a):
     """a = {field: value} as the service documents for NVMe. All of these are worth showing."""
+    if not isinstance(a, dict):
+        return []
+    sensors = a.get("temp_sensors")
+    a = {k: v for k, v in a.items() if _int(v) and v >= 0}     # a field of another kind is left out, not shown wrong
+    a.pop("temp_sensors", None)                                 # must be a list of readings, nothing else
+    if isinstance(sensors, (list, tuple)):
+        a["temp_sensors"] = [k for k in sensors if _int(k) and k >= 0]
     rows = []
     if "percent_used" in a:
         used = a["percent_used"]
@@ -247,11 +265,15 @@ _UNIT = {"poweronhours": _HOURS, "temperaturecelsius": _KELVIN, "airflowtemperat
 def smartctl_rows(data):
     """Rows from the engine's `smart_data` (parts of `smartctl -j`): the same rules and words as ata_rows and
     nvme_rows, so a drive reads the same whichever way its record was fetched."""
+    if not isinstance(data, dict):
+        return []
     verdict = []
-    if data.get("smart_status", {}).get("passed") is False:
+    status = data.get("smart_status")
+    if isinstance(status, dict) and status.get("passed") is False:
         verdict.append(Row("The drive's own verdict", "FAILED", "FAILING",
                            "The drive itself says it is failing. Copy your files off it now."))
     nv = data.get("nvme_smart_health_information_log")
+    nv = {k: v for k, v in nv.items() if _int(v) and v >= 0} if isinstance(nv, dict) else None
     if nv and nv.get("critical_warning"):
         verdict.append(Row("Critical warning", str(nv["critical_warning"]), "Warning from the drive",
                            "The drive raises a critical warning: spare space, temperature, reliability or "
@@ -270,11 +292,17 @@ def smartctl_rows(data):
             a["temp_sensors"] = [nv["temperature"] + 273]
         return verdict + nvme_rows({k: v for k, v in a.items() if v is not None})
     tuples, names = [], {}
-    for at in data.get("ata_smart_attributes", {}).get("table", []):
-        ident, name = int(at.get("id", 0)), str(at.get("name", ""))
-        raw = at.get("raw", {})
+    held = data.get("ata_smart_attributes")
+    table = held.get("table") if isinstance(held, dict) else None
+    for at in table if isinstance(table, list) else []:
+        if not isinstance(at, dict) or not _int(at.get("id")) or not isinstance(at.get("name", ""), str):
+            continue                                    # an attribute smartctl gives in another shape: left out
+        ident, name = at["id"], at.get("name", "")
+        raw = at.get("raw") if isinstance(at.get("raw"), dict) else {}
+        at = dict(at, flags=at.get("flags") if isinstance(at.get("flags"), dict) else {},
+                  **{k: at.get(k) if _int(at.get(k)) else -1 for k in ("value", "worst", "thresh")})
         lead = re.match(r"\s*(-?\d+)", str(raw.get("string", "")))          # a temperature can be below zero
-        n = int(lead.group(1)) if lead else int(raw.get("value") or 0)
+        n = int(lead.group(1)) if lead else raw.get("value") if _int(raw.get("value")) else 0
         unit = _UNIT.get(_key(name), 1)
         pretty = n * 3_600_000 if unit == _HOURS else round((n + 273.15) * 1000) if unit == _KELVIN else n
         known = bool(name) and not name.startswith("Unknown")

@@ -157,7 +157,10 @@ def size_text(n):
 
 
 def _props(ifaces, name):
-    return {k: v.get("data") for k, v in ifaces.get(_P + name, {}).items()}
+    found = ifaces.get(_P + name, {}) if isinstance(ifaces, dict) else {}
+    if not isinstance(found, dict):
+        return {}
+    return {k: v.get("data") for k, v in found.items() if isinstance(v, dict)}
 
 
 def _celsius(kelvin):
@@ -184,8 +187,32 @@ _FLASH_MEDIA = {"thumb", "flash", "flash_cf", "flash_ms", "flash_sm", "flash_sd"
 
 
 def parse(answer):
-    """busctl's JSON answer -> list of Drive, biggest first within: removable, then the rest."""
-    objs = answer["data"][0] if isinstance(answer, dict) and answer.get("data") else {}
+    """busctl's JSON answer -> list of Drive, biggest first within: removable, then the rest.
+
+    One device the service describes in a way we do not expect must not hide all the others: an entry that
+    cannot be read is left out and the rest is shown."""
+    try:
+        objs = answer["data"][0]
+    except (TypeError, KeyError, IndexError):
+        return []
+    if not isinstance(objs, dict):
+        return []
+    objs = {path: ifaces for path, ifaces in objs.items() if isinstance(path, str) and isinstance(ifaces, dict)}
+    try:
+        return _parse(objs)
+    except Exception:
+        for path in list(objs):
+            try:
+                _parse({path: objs[path]})          # alone it shows whether it is the one that cannot be read
+            except Exception:
+                del objs[path]
+        try:
+            return _parse(objs)
+        except Exception:
+            return []
+
+
+def _parse(objs):
     drives = {}
     for path, ifaces in objs.items():
         d = _props(ifaces, "Drive")

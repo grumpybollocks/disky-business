@@ -16,8 +16,10 @@ def table(mountinfo="/proc/self/mountinfo"):
     with open(mountinfo) as f:
         for line in f:
             left, _, right = line.partition(" - ")
-            r = right.split()
-            yield unescape(left.split()[4]), r[0], r[1] if len(r) > 1 else ""
+            head, r = left.split(), right.split()
+            if len(head) < 5 or not r:
+                continue                            # not a line the kernel writes: skipped, never a crash
+            yield unescape(head[4]), r[0], r[1] if len(r) > 1 else ""
 
 
 def holding(path, mountinfo="/proc/self/mountinfo"):

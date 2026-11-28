@@ -59,7 +59,7 @@ VERDICTS = {"good", "bad", "not_verified", "nothing_to_check", "stopped"}
 
 def problems(ev):
     """Return a list of what is wrong with one event (empty = fine)."""
-    if not isinstance(ev, dict) or ev.get("event") not in EVENTS:
+    if not isinstance(ev, dict) or not isinstance(ev.get("event"), str) or ev["event"] not in EVENTS:
         return [f"unknown event: {ev!r}"[:120]]
     kind, out = ev["event"], []
     for field, kinds in EVENTS[kind].items():

@@ -54,8 +54,18 @@ def _hours(h):
     return f"{num(h)} hours" + (f" (about {years:.1f} years)" if years >= 1 else "")
 
 
+UNREADABLE = "This part of the drive's answer could not be read."
+
+
 def identity(data, show_serial=False):
-    """[(name, value)] for the Identity card."""
+    """[(name, value)] for the Identity card. An answer in an unexpected shape gives one line saying so."""
+    try:
+        return _identity(data if isinstance(data, dict) else {}, show_serial)
+    except Exception:
+        return [("Identity", UNREADABLE)]
+
+
+def _identity(data, show_serial=False):
     rows = []
 
     def add(name, value):
@@ -237,8 +247,12 @@ CARDS = (("Errors the drive logged", _errors), ("Self-test history", _selftests)
 def history(data):
     """[(title, lines, meaning)] for every history card the drive has data for."""
     out = []
+    data = data if isinstance(data, dict) else {}
     for title, make in CARDS:
-        got = make(data)
+        try:
+            got = make(data)
+        except Exception:                           # one card in an unexpected shape does not cost the others
+            got = ([UNREADABLE], "")
         if got:
             out.append((title, got[0], got[1]))
     return out
