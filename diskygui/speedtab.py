@@ -6,7 +6,7 @@ from PySide6.QtCore import QPointF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QPolygonF
 from PySide6.QtWidgets import QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-from .tabbase import TabBase
+from .tabbase import ProgressLine, TabBase
 
 ROWS = (("seq_write", "Writing in one go"), ("seq_read", "Reading in one go"),
         ("rand_read", "Small reads, random places"), ("rand_write", "Small writes, random places"))
@@ -209,11 +209,17 @@ class SpeedTab(TabBase):
         self.status = QLabel("Pick a drive, then press Start.")
         self.status.setWordWrap(True)                   # a long reason must never force the window wide
         self.status.setObjectName("status")
-        self.go = QPushButton("Start")
+        self.go = QPushButton("Start speed test")
         self.go.setObjectName("primary")
         self.go.clicked.connect(self.start_or_stop)
+        self.progress = ProgressLine()                  # shown while the speed test runs
+        self.progress.hide()
+        self.phase = 0
+        words = QVBoxLayout()
+        words.addWidget(self.status)
+        words.addWidget(self.progress)
         bottom = QHBoxLayout()
-        bottom.addWidget(self.status, 1)
+        bottom.addLayout(words, 1)
         bottom.addWidget(self.go)
 
         right = QVBoxLayout()
@@ -243,14 +249,17 @@ class SpeedTab(TabBase):
         self.update_buttons()
 
     def update_buttons(self):
-        self.go.setText("Stop" if self.mode else "Start")
+        self.go.setText("Stop" if self.mode else "Start speed test")
         self.go.setEnabled(bool(self.folder))
+        self.progress.setVisible(bool(self.mode))
+        self.status.setVisible(not self.mode)
         self.panel.set_busy(self.mode is not None)
 
     def start_or_stop(self):
         if self.mode:
             self.stopping = True
             self.status.setText("Stopping...")
+            self.show_progress(0.0)
             self.runner.stop()
         elif self.folder:
             self.begin()
@@ -261,6 +270,8 @@ class SpeedTab(TabBase):
         self.graph.clear()
         self.bars.clear()
         self.status.setText("Starting...")
+        self.phase = 0
+        self.progress.show_progress("Starting", None, "", "")
         self.set_busy("speed")
         self.runner.start("speed", self.folder, *extra)
 
@@ -271,8 +282,13 @@ class SpeedTab(TabBase):
                 self.graph.total = ev["total_bytes"]
             if not getattr(self, "stopping", False):     # "Stopping..." stays until it has stopped
                 self.status.setText("Measuring: " + WORDS.get(ev.get("test"), "working").lower() + "...")
+            names = [test for test, _ in ROWS]
+            self.phase = names.index(ev.get("test")) if ev.get("test") in names else self.phase
+            self.show_progress(0.0)
         elif kind == "speed_sample":
             self.graph.add(ev.get("test"), ev.get("offset_bytes", 0), ev.get("mib_per_s", 0))
+            if self.graph.total:
+                self.show_progress(min(1.0, ev.get("offset_bytes", 0) / self.graph.total))
         elif kind == "speed_result" and ev.get("test") in self.values:
             self.results[ev["test"]] = ev
             self.bars.set_result(ev["test"], ev.get("mib_per_s"), result_text(ev))
@@ -280,6 +296,13 @@ class SpeedTab(TabBase):
             self.tip(ev.get("message", ""))
         elif kind == "error":
             self.error = ev.get("message") or "The engine reported an error."
+
+    def show_progress(self, part):
+        """Four measurements; `part` is how far the one in hand is (0 to 1)."""
+        _test, words = ROWS[self.phase]
+        title = "Stopping" if getattr(self, "stopping", False) else words
+        self.progress.show_progress(title, 100 * (self.phase + part) / len(ROWS),
+                                    f"measurement {self.phase + 1} of {len(ROWS)}", "")
 
     def on_finished(self, code, crash):
         if crash:

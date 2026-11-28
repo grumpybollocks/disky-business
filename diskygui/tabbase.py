@@ -196,6 +196,13 @@ class TabBase(QWidget):
         if (was is None) != (mode is None):
             self.busy_changed.emit(mode is not None)
 
+    NO_STOP = ()                        # jobs that must run to their end (a repair)
+
+    def stop_job(self):
+        """Stop the job in hand, if it may be stopped (the Esc key)."""
+        if self.mode is not None and self.mode not in self.NO_STOP and self.runner.running():
+            self.runner.stop()
+
     def shutdown(self):
         try:
             if self.runner.running():

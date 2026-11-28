@@ -6,6 +6,7 @@ Each tab is its own widget added in MainWindow.TABS; a tab appears only when its
 import os
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
+from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow,
                                QMessageBox, QPushButton, QStackedWidget, QTabWidget, QVBoxLayout, QWidget)
 
@@ -45,6 +46,20 @@ def time_text(seconds):
     if seconds >= 3600:
         return f"{seconds / 3600:.1f} h left"
     return f"{round(seconds / 60)} min left" if seconds >= 90 else f"{int(seconds)} s left"
+
+
+START_TIP = "Fill the drive's free space with test files, then read all of it back"
+OLD_FILES_TIP = ("Test files from an earlier test are still here. \"Check test files again\" reads them back; "
+                 "\"Delete test files\" removes them. Then a new test can start.")
+
+
+def has_test_files(folder):
+    """True when Disky test files from an earlier test lie in this folder."""
+    from disky import engine
+    try:
+        return bool(engine.test_files(folder))
+    except OSError:
+        return False
 
 
 def test_plan(folder, statvfs=os.statvfs, files=None, system=None):
@@ -124,7 +139,9 @@ class TestTab(TabBase):
         self.plan_of = test_plan                        # replaced in tests
         self.go = QPushButton("Start test")
         self.go.setObjectName("primary")                # the main action of the tab
-        self.go.setToolTip("Fill the drive's free space with test files, then read all of it back")
+        self.go.setToolTip(START_TIP)
+        self.old_of = has_test_files                    # replaced in tests
+        self.old_files = False
         self.go.clicked.connect(self.start_or_stop)
         self.remove = QPushButton("Delete test files")
         self.remove.setToolTip("Delete the test files Disky wrote here, after asking. Nothing else is deleted")
@@ -167,9 +184,10 @@ class TestTab(TabBase):
         if self.mode is None and _folder:
             self.plan.setText(LOOKING)                  # the drive may be slow: it answers off this thread
             self.stack.setCurrentWidget(self.plan)
-            plan_of = self.plan_of
+            plan_of, old_of = self.plan_of, self.old_of
             self.plans = getattr(self, "plans", 0) + 1     # only the newest answer counts
-            self.panel.later(lambda: plan_of(_folder), self.plan_read, _folder, self.plans)
+            self.old_files = False
+            self.panel.later(lambda: (plan_of(_folder), old_of(_folder)), self.plan_read, _folder, self.plans)
         elif self.mode is None and hint:
             self.stack.setCurrentWidget(self.status)
             self.status.setText(hint)
@@ -177,12 +195,18 @@ class TestTab(TabBase):
 
     def plan_read(self, folder, number, result):
         if self.mode is None and self.folder == folder and number == self.plans:
-            self.plan.setText(result if isinstance(result, str) else "Press \"Start test\" to test this drive.")
+            text, old = result if isinstance(result, tuple) else (None, False)
+            self.plan.setText(text if isinstance(text, str) else "Press \"Start test\" to test this drive.")
+            self.old_files = bool(old)                  # test files from before: check or delete them first
+            self.update_buttons()
 
     def update_buttons(self):
         busy = self.mode is not None
         self.go.setText("Stop test" if self.mode in RUNS else "Start test")
-        self.go.setEnabled(bool(self.folder) and self.mode != "clean")
+        # No new test over old test files: the plan under the map says to check or delete them first.
+        self.go.setEnabled(bool(self.folder) and self.mode != "clean"
+                           and not (self.mode is None and getattr(self, "old_files", False)))
+        self.go.setToolTip(OLD_FILES_TIP if self.mode is None and getattr(self, "old_files", False) else START_TIP)
         self.remove.setEnabled(bool(self.folder) and not busy)
         self.check.setEnabled(bool(self.folder) and not busy)
         self.panel.set_busy(busy)
@@ -271,6 +295,14 @@ class TestTab(TabBase):
         else:
             self._verdict(*self._judge(code))
         self.set_busy(None)
+        folder, old_of = self.folder, self.old_of
+        if folder:                                      # a test leaves its files, Delete takes them away:
+            self.panel.later(lambda: old_of(folder), self.old_read, folder)     # look again, off this thread
+
+    def old_read(self, folder, result):
+        if self.folder == folder and self.mode is None:
+            self.old_files = result is True
+            self.update_buttons()
 
     def _judge(self, code):
         s = self.summary or {}
@@ -320,6 +352,8 @@ def system_is_dark():
 TIP_SECONDS = 30            # how long one tip stays; long enough to read it and get the joke
 
 
+ADMIN_TIP = ("The password was given once for this session. End it now; the next admin job asks again. It also "
+             "ends when you close the app")
 CLOSE_DRIVE = ("A drive is being mounted, unmounted or looked at right now. Closing the window now can leave that "
                "half done. Close anyway?")
 CLOSE_REPAIR = ("A repair is running. Stopping it half way can leave the file system worse than before. Wait "
@@ -355,8 +389,7 @@ class MainWindow(QMainWindow):
         self.admin = admin or AdminSession(parent=self)
         self.admin.changed.connect(self.on_admin)
         self.admin_button = QPushButton("Admin session open: End")
-        self.admin_button.setToolTip("The password was given once for this session. End it now; the next admin "
-                                     "job asks again. It also ends when you close the app")
+        self.admin_button.setToolTip(ADMIN_TIP)
         self.admin_button.clicked.connect(self.end_admin)
         self.admin_button.hide()
         for cls in self.TABS:
@@ -367,6 +400,12 @@ class MainWindow(QMainWindow):
             self.tabs.addTab(page, cls.title)
         self.tabs.setCornerWidget(self.theme_button, Qt.TopRightCorner)
         self._tab = 0
+        # Keys: F5 reads the drive list again, Esc stops the job in hand, Ctrl+Q closes (asking first if busy).
+        self.keys = []
+        for key, slot in (("F5", self.key_refresh), ("Esc", self.key_stop), ("Ctrl+Q", self.close)):
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.activated.connect(slot)
+            self.keys.append(shortcut)
         self.tabs.currentChanged.connect(self.on_tab)
         self._label_theme_button()
         body = QWidget()
@@ -413,6 +452,14 @@ class MainWindow(QMainWindow):
             self.next_tip()
         self._tab = index
 
+    def key_refresh(self):
+        panel = self.pages[self.tabs.currentIndex()].panel
+        if panel.refresh.isEnabled():
+            panel.refresh_clicked()
+
+    def key_stop(self):
+        self.pages[self.tabs.currentIndex()].stop_job()
+
     def on_admin(self, is_open):
         self.admin_button.setVisible(is_open)
 
@@ -423,6 +470,10 @@ class MainWindow(QMainWindow):
     def on_busy(self, busy):
         """One job at a time: while a tab works, the others cannot be opened."""
         self.tabs.tabBar().setEnabled(not any(p.working for p in self.pages))
+        working = any(p.working for p in self.pages)
+        self.admin_button.setEnabled(not working)       # it cannot end under a running job: say so, not nothing
+        self.admin_button.setToolTip("A job is running: the admin session can be ended when it is done." if working
+                                     else ADMIN_TIP)
         dress(self, self.theme)                         # Start became Stop, or the other way round
 
     def _label_theme_button(self):

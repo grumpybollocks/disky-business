@@ -39,7 +39,10 @@ def repair_question(volume, last_check, failing, drive=""):
              "Repair changes the drive. If files on it matter and you can still read them, copy them off first: "
              "a repair can remove damaged files.",
              "Once started it cannot be stopped. Do not unplug the drive while it runs."]
-    if last_check is None:
+    if last_check == "repaired":
+        lines += ["", "It was repaired in this session and has not been checked since. Check only reads, and "
+                      "tells you whether another repair is needed."]
+    elif last_check is None:
         lines += ["", "It has not been checked yet. Check only reads, and tells you whether a repair is needed."]
     elif last_check:
         lines += ["", "The last check found no problems, so a repair is probably not needed."]
@@ -53,6 +56,8 @@ def repair_question(volume, last_check, failing, drive=""):
 
 class MaintenanceTab(TrimTab):
     title = "Maintenance"
+    USES_FOLDER = False                 # it works on partitions and whole drives: no folder to choose
+    NO_STOP = ("check", "repair")       # a repair must never be cut short; a check is left to finish
     NOTE = "Pick a drive above, then a partition on the right."
 
     def extend(self, right):
@@ -126,6 +131,11 @@ class MaintenanceTab(TrimTab):
 
     def show_advice(self):
         v = self.picked()
+        d = self.panel.current_drive()
+        shown = getattr(self, "status_of", None)
+        if self.mode is None and shown is not None and (v is None or d is None or (d.path, v.device) != shown):
+            self.maint_status.setText("")               # the result belonged to the partition picked before
+            self.status_of = None
         if v is None:
             self.info.setText("Pick a partition." if self.volumes else
                               "Pick a drive on the left to see its partitions.")
@@ -217,7 +227,11 @@ class MaintenanceTab(TrimTab):
         elif self.maint_result:
             if self.mode == "check":
                 self.checked[self.maint_device] = bool(self.maint_result.get("ok"))
-            self.maint_status.setText(str(self.maint_result.get("message", "")))
+            elif self.maint_result.get("ok"):
+                self.checked[self.maint_device] = "repaired"    # the earlier check no longer describes it
+            # The result names its partition, so it cannot be read as belonging to another one.
+            self.maint_status.setText(f"{self.maint_device[1]}: {self.maint_result.get('message', '')}")
+            self.status_of = self.maint_device
         else:
             self.maint_status.setText(f"Ended without a result (exit {code}).")
         self.set_busy(None)

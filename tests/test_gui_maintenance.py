@@ -111,7 +111,7 @@ class Tab(unittest.TestCase):
         self.assertFalse(self.win.tabs.tabBar().isEnabled())
         self.wait(tab)
         self.assertEqual(tab.runner.last_argv[-6:], ["fscheck", "sdz1", "--json", "--stdin-stop", "--expect", "vfat:1073741824"])
-        self.assertEqual((tab.maint_status.text(), tab.checked), ("Problems found.", {("/p/usb", "sdz1"): False}))
+        self.assertEqual((tab.maint_status.text(), tab.checked), ("sdz1: Problems found.", {("/p/usb", "sdz1"): False}))
         asked = []
         tab.confirm = lambda text: asked.append(text) or False
         tab.repair_button.click()
@@ -125,7 +125,7 @@ class Tab(unittest.TestCase):
         self.wait(tab)
         self.assertEqual(tab.runner.last_argv[-7:], ["fsrepair", "sdz1", "--json", "--stdin-stop", "--yes", "--expect", "vfat:1073741824"])
         self.assertIn("on EXAMPLE USB?", asked[0])
-        self.assertEqual(tab.maint_status.text(), "Repaired.")
+        self.assertEqual(tab.maint_status.text(), "sdz1: Repaired.")
 
     def test_nothing_is_offered_where_it_must_not_run(self):
         tab = self.open("good", [usb(Volume("sdz1", 1, "ntfs", []), Volume("sdz2", 1, "exfat", ["/run/media/x/D"]),
@@ -159,7 +159,7 @@ class Tab(unittest.TestCase):
         tab.check_button.click()
         tab.panel.settle()
         self.wait(tab)
-        self.assertEqual(tab.maint_status.text(), "No problems found.")
+        self.assertEqual(tab.maint_status.text(), "sdz1: No problems found.")
         started = []
         tab.runner.start = lambda *a, **k: started.append(a)
         tab.confirm = lambda text: True

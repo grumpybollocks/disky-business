@@ -202,6 +202,7 @@ class SmartTab(TabBase):
     def fill(self):
         rows = sorted((r for r in self.rows if r.main or self.show_all.isChecked()), key=lambda r: not r.bad)
         self.table.setRowCount(len(rows))
+        self.table.setWordWrap(True)                    # "What it means" in full, on more lines if need be
         red = QColor(self.theme.states["bad"])
         figures = smart.glance(self.rows)
         for i, (tile, value, name) in enumerate(self.glance_boxes):
@@ -222,6 +223,7 @@ class SmartTab(TabBase):
                 if r.bad:
                     item.setForeground(red)
                 self.table.setItem(i, j, item)
+        self.table.resizeRowsToContents()
 
     def read_with_password(self):
         d = self.panel.current_drive()
@@ -351,7 +353,7 @@ class SmartTab(TabBase):
         self.short_button.setEnabled(self.mode is None)
         self.long_button.setEnabled(self.mode is None)
         self.usb_button.setEnabled(self.mode is None)
-        self.deep_button.setVisible(bool(d and d.device))
+        self.deep_button.setVisible(bool(d and d.device and not d.flash))    # sticks and cards keep no such record
         self.deep_button.setEnabled(self.mode is None)
         self.again.setEnabled(self.mode is None and self.panel.current_drive() is not None)
         self.panel.set_busy(self.mode is not None)

@@ -21,6 +21,9 @@ except ImportError as missing:
     HAVE_QT = False
 
 
+FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_engine.py")
+
+
 def drive(model, mounts=(), fstype="ext4", kind="SSD", usb=False, path=None, volumes=None):
     vols = volumes if volumes is not None else [dr.Volume("sdz1", 1 << 30, fstype, list(mounts), False)]
     return dr.Drive(model, 1 << 30, kind, usb, dr.Health(), vols, path=path or "/p/" + model)
@@ -338,6 +341,150 @@ class Hunt(unittest.TestCase):
         self.assertNotEqual(window.CLOSE_REPAIR, window.CLOSE_DRIVE)
         self.assertTrue(win.isVisible())
         page.set_busy(None)
+
+    # -- usability (review items Q1-Q11) -----------------------------------------------------------------------
+    def test_q1_no_start_over_old_test_files_and_no_red_alarm(self):
+        f = self.folder()
+        open(os.path.join(f, "1.h2w"), "w").close()
+        win = self.open([drive("A", [f])])
+        tab = win.pages[0]
+        self.pick(tab, 0)
+        self.assertFalse(tab.go.isEnabled())                    # check or delete them first
+        self.assertTrue(tab.check.isEnabled() and tab.remove.isEnabled())
+        self.assertIn("already holds 1 Disky test file", tab.plan.text())
+        self.assertIn("Check test files again", tab.go.toolTip())
+        os.remove(os.path.join(f, "1.h2w"))
+        tab.confirm = lambda text: True
+        tab.remove.click()                                      # the pretend engine reports them deleted
+        end = time.monotonic() + 5
+        while tab.mode is not None and time.monotonic() < end:
+            self.app.processEvents()
+        tab.panel.settle()
+        self.assertTrue(tab.go.isEnabled())                     # now a new test can start
+
+    def test_q2_q11_a_result_names_its_partition_goes_with_it_and_a_repair_is_remembered(self):
+        from diskygui import maintenancetab
+        two = dr.Drive("A", 1 << 36, "HDD", True, dr.Health(), [dr.Volume("sdz1", 1 << 30, "vfat", []),
+                                                                dr.Volume("sdz2", 1 << 30, "ext4", [])], path="/p/a")
+        win = MainWindow(theme=THEMES["w98"], drives=lambda: [two],
+                         runners={"Maintenance": EngineRunner([sys.executable, FAKE, "bad"])})
+        self.addCleanup(win.close)
+        win.confirm_close = lambda text: True
+        tab = self.page(win, "Maintenance")
+        self.pick(tab, 0)
+        tab.parts.setCurrentRow(0)
+        tab.check_button.click()
+        self.finish(tab)
+        self.assertEqual(tab.maint_status.text(), "sdz1: Problems found.")
+        tab.parts.setCurrentRow(1)
+        self.assertEqual(tab.maint_status.text(), "")           # not shown beside another partition
+        tab.parts.setCurrentRow(0)
+        asked = []
+        tab.confirm = lambda text: asked.append(text) or True
+        tab.repair_button.click()
+        self.finish(tab)
+        self.assertEqual(tab.maint_status.text(), "sdz1: Repaired.")
+        self.assertIn("The last check found problems.", asked[0])
+        tab.confirm = lambda text: asked.append(text) or False
+        tab.repair_button.click()
+        tab.panel.settle()
+        self.assertIn("repaired in this session and has not been checked since", asked[1])
+        self.assertNotIn("found problems", asked[1])
+        self.assertEqual(maintenancetab.MaintenanceTab.NO_STOP, ("check", "repair"))
+
+    def finish(self, tab, seconds=6.0):
+        tab.panel.settle()
+        end = time.monotonic() + seconds
+        while tab.mode is not None:
+            self.assertLess(time.monotonic(), end, "timed out")
+            self.app.processEvents()
+            time.sleep(0.005)
+        tab.panel.settle()
+
+    def test_q3_maintenance_shows_no_folder_line(self):
+        win = self.open([])
+        tab = self.page(win, "Maintenance")
+        self.assertTrue(tab.panel.folder_box.isHidden() and tab.panel.choose.isHidden())
+        self.assertFalse(win.pages[0].panel.folder_box.isHidden())
+
+    def test_q4_keys_refresh_stop_and_quit(self):
+        calls = []
+        win = self.open(lambda: calls.append(1) or [])
+        win.show()
+        keys = {k.key().toString(): k for k in win.keys}
+        self.assertEqual(sorted(keys), ["Ctrl+Q", "Esc", "F5"])
+        before = len(calls)
+        keys["F5"].activated.emit()
+        win.pages[0].panel.settle()
+        self.assertEqual(len(calls), before + 1)                # the drive list was read again
+        tab = win.pages[0]
+        stopped = []
+        tab.runner.running = lambda: True
+        tab.runner.stop = lambda: stopped.append("stop")
+        tab.mode = "test"
+        keys["Esc"].activated.emit()
+        self.assertEqual(stopped, ["stop"])
+        tab.mode, tab.NO_STOP = "repair", ("repair",)
+        keys["Esc"].activated.emit()
+        self.assertEqual(stopped, ["stop"])                     # a repair is never cut short
+        tab.mode = None
+        del tab.runner.running
+        asked = []
+        win.confirm_close = lambda text: asked.append(text) or True
+        keys["Ctrl+Q"].activated.emit()
+        self.assertFalse(win.isVisible())
+
+    def test_q6_q8_the_speed_test_shows_how_far_it_is(self):
+        f = self.folder()
+        win = MainWindow(theme=THEMES["w98"], drives=lambda: [drive("A", [f])],
+                         runners={"Speed": EngineRunner([sys.executable, FAKE, "slow"])})
+        self.addCleanup(win.close)
+        win.confirm_close = lambda text: True
+        tab = self.page(win, "Speed")
+        self.pick(tab, 0)
+        self.assertEqual(tab.go.text(), "Start speed test")
+        self.assertTrue(tab.progress.isHidden())
+        tab.go.click()
+        end = time.monotonic() + 5
+        while "measurement 1 of 4" not in tab.progress.left.text() and time.monotonic() < end:
+            self.app.processEvents()
+        self.assertFalse(tab.progress.isHidden())
+        self.assertEqual((tab.progress.title.text(), tab.progress.left.text()), ("Writing in one go", "measurement 1 of 4"))
+        tab.show_progress(0.5)
+        self.assertEqual(tab.progress.bar.value(), 12)          # half of the first of four
+        tab.go.click()
+        self.assertEqual(tab.progress.title.text(), "Stopping")
+        self.finish(tab)
+        self.assertTrue(tab.progress.isHidden())
+
+    def test_q7_end_says_why_it_waits(self):
+        win = self.open([])
+        self.assertTrue(win.admin_button.isEnabled())
+        win.pages[0].set_busy("test")
+        self.assertFalse(win.admin_button.isEnabled())
+        self.assertIn("A job is running", win.admin_button.toolTip())
+        win.pages[0].set_busy(None)
+        self.assertTrue(win.admin_button.isEnabled())
+        self.assertIn("password was given once", win.admin_button.toolTip())
+
+    def test_q9_no_deep_scan_for_sticks_and_cards(self):
+        stick = drive("STICK", usb=True, kind="stick")
+        stick.device = "sdz"
+        disk = drive("DISK", usb=True, path="/p/disk")
+        disk.device = "sdy"
+        win = self.open([stick, disk])
+        tab = self.page(win, "SMART")
+        self.pick(tab, 0)
+        self.assertTrue(tab.deep_button.isHidden())
+        self.pick(tab, 1)
+        self.assertFalse(tab.deep_button.isHidden())
+
+    def test_words_times_switched_on_is_explained_and_defrag_says_it_once(self):
+        from diskygui import defragtab, smart
+        rows = smart.ata_rows([[12, "power-cycle-count", 50, 99, 99, 0, 7, 1, {}]])
+        self.assertEqual((rows[0].name, rows[0].about), ("Times switched on", "How often the drive was powered up."))
+        self.assertTrue(all(r.about for r in smart.nvme_rows({"power_cycles": 7})))
+        self.assertNotIn("Scanning only reads", defragtab.DefragTab.NOTE)
 
 if __name__ == "__main__":
     unittest.main()

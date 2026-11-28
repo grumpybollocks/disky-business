@@ -46,7 +46,7 @@ for _keys, _label, _about, _rule in (
         (("udmacrcerrorcount", "satacrcerrorcount", "crcerrorcount"), "Cable errors",
          "Data spoiled on the way through the cable or connector. Usually the cable, not the drive.", "cable"),
         (("poweronhours",), "Hours switched on", "Total running time.", ""),
-        (("powercyclecount",), "Times switched on", "", ""),
+        (("powercyclecount",), "Times switched on", "How often the drive was powered up.", ""),
         (("temperaturecelsius", "temperaturecelsius2"), "Temperature", "The drive's temperature now.", ""),
         (("airflowtemperaturecel", "airflowtemperaturecelsius"), "Air temperature",
          "The air inside the drive, as the drive measures it. Usually close to the temperature above.", "extra"),
@@ -213,7 +213,7 @@ def nvme_rows(a):
         rows.append(Row("Hours switched on", f"{_num(a['power_on_hours'])} hours", "OK", "Total running time."))
     for key, label, about in (("num_err_log_entries", "Error log entries",
                                "Errors the drive noted. Often harmless; data errors above are what count."),
-                              ("power_cycles", "Times switched on", ""),
+                              ("power_cycles", "Times switched on", "How often the drive was powered up."),
                               ("unsafe_shutdowns", "Times power was cut", "Switched off without warning.")):
         if key in a:
             rows.append(Row(label, _num(a[key]), "OK", about))

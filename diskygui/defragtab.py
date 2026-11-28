@@ -45,7 +45,7 @@ def share_text(part, whole):
 
 class DefragTab(TabBase):
     title = "Defrag"
-    NOTE = "Pick a drive above. Scanning only reads."
+    NOTE = "Pick a drive above."
 
     def __init__(self, theme, runner=None, tip=None, drives=None, parent=None):
         super().__init__(theme, runner, tip, drives, parent)
