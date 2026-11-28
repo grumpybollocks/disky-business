@@ -122,6 +122,7 @@ class EngineRunner(QObject):
         # A Python error inside the engine ends it with code 1, the same code as "the drive is bad": tell them
         # apart by the error report on its error output, and show its last line.
         crashed = (status == QProcess.CrashExit and code != 130) or "Traceback (most recent call last)" in err
+        self._proc.deleteLater()                        # released now, on this thread, not whenever its owner goes
         self._proc = None
         if crashed:
             self.finished.emit(-1, "The engine stopped unexpectedly." + (f" ({tail[-1][:160]})" if tail else ""))

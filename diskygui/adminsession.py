@@ -64,7 +64,9 @@ class AdminSession(QObject):
         p = self._proc
         if p is not None and p.state() != QProcess.NotRunning:
             p.closeWriteChannel()
-            p.waitForFinished(2000)
+            if not p.waitForFinished(2000):             # it did not end by itself: do not leave it behind
+                p.kill()
+                p.waitForFinished(1000)
 
     # -- internals -----------------------------------------------------------------------------------------
     def _launch(self):
@@ -123,8 +125,10 @@ class AdminSession(QObject):
         self._gone(code, "The admin helper ended unexpectedly." if crashed else "")
 
     def _gone(self, code, crash):
-        was_ready = self.ready
+        was_ready, ended = self.ready, self._proc
         self._proc, self.ready, self._waiting = None, False, None
+        if ended is not None:
+            ended.deleteLater()                         # released now, on this thread, not whenever its owner goes
         client, self.client = self.client, None
         if was_ready:
             self.changed.emit(False)
