@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Care tab: check a partition's file system, repair it, and trim an SSD.
+"""The Maintenance tab: check a partition's file system, repair it, and trim an SSD.
 
 Check only reads. Repair changes the drive, so every Repair first shows the warnings that apply and asks.
 The work is done by the system's own tools through the engine (`disky fscheck`, `disky fsrepair`).
@@ -50,15 +50,15 @@ def repair_question(volume, last_check, failing, drive=""):
     return "\n".join(lines)
 
 
-class CareTab(TrimTab):
-    title = "Care"
+class MaintenanceTab(TrimTab):
+    title = "Maintenance"
     NOTE = "Pick a drive above, then a partition on the right."
 
     def extend(self, right):
         self.volumes = []
         self.checked = {}                               # (drive, partition) -> what its last check here found
         self.shown_drive = None
-        self.care_result = None
+        self.maint_result = None
         about = QLabel(ABOUT)
         about.setWordWrap(True)
         head = QLabel("Partitions")
@@ -75,11 +75,11 @@ class CareTab(TrimTab):
         self.repair_button = QPushButton("Repair")
         self.repair_button.setToolTip("Lets the system's tool fix the file system. Changes the drive; asks first")
         self.repair_button.clicked.connect(self.repair)
-        self.care_status = QLabel("")
-        self.care_status.setObjectName("status")
-        self.care_status.setWordWrap(True)
+        self.maint_status = QLabel("")
+        self.maint_status.setObjectName("status")
+        self.maint_status.setWordWrap(True)
         row = QHBoxLayout()
-        row.addWidget(self.care_status, 1)
+        row.addWidget(self.maint_status, 1)
         row.addWidget(self.check_button)
         row.addWidget(self.repair_button)
         line = QFrame()
@@ -106,7 +106,7 @@ class CareTab(TrimTab):
             d = self.panel.current_drive()
             if (d.path if d else None) != self.shown_drive:
                 self.shown_drive = d.path if d else None
-                self.care_status.setText("")            # a result belongs to the drive it was got from
+                self.maint_status.setText("")            # a result belongs to the drive it was got from
             before = self.picked().device if self.picked() else None
             self.volumes = list(d.volumes) if d else []
             self.parts.blockSignals(True)
@@ -150,14 +150,14 @@ class CareTab(TrimTab):
         same = next((x for x in now.volumes if x.device == v.device), None) if now else None
         if same is None or (same.fstype, same.size) != (v.fstype, v.size) or not advice(same)[0]:
             self.panel.load_drives()                    # shows the drives as they are; nothing stays picked
-            self.care_status.setText("The drives changed since the list was read. Pick the drive again.")
+            self.maint_status.setText("The drives changed since the list was read. Pick the drive again.")
             return None
         return now, same
 
     def check(self):
         found = self.still_there()
         if found:
-            self._care("check", "fscheck", "Checking... this only reads.", *found)
+            self._maint("check", "fscheck", "Checking... this only reads.", *found)
 
     def repair(self):
         found = self.still_there()
@@ -166,18 +166,18 @@ class CareTab(TrimTab):
         d, v = found
         if self.confirm(repair_question(v, self.checked.get((d.path, v.device)), d.health.state == "failing",
                                         d.model)):
-            self._care("repair", "fsrepair", "Repairing... do not unplug the drive.", d, v, "--yes")
+            self._maint("repair", "fsrepair", "Repairing... do not unplug the drive.", d, v, "--yes")
 
-    def _care(self, mode, command, words, d, v, *options):
-        self.error = self.care_result = None
-        self.care_device = (d.path, v.device)
-        self.care_status.setText(words)
+    def _maint(self, mode, command, words, d, v, *options):
+        self.error = self.maint_result = None
+        self.maint_device = (d.path, v.device)
+        self.maint_status.setText(words)
         self.set_busy(mode)
         self.runner.start(command, v.device, *options, admin="if_open")
 
     def on_event(self, ev):
         if ev.get("event") == "fs_result":
-            self.care_result = ev
+            self.maint_result = ev
         else:
             super().on_event(ev)
 
@@ -185,13 +185,13 @@ class CareTab(TrimTab):
         if self.mode == "trim":
             return super().on_finished(code, crash)
         if crash:
-            self.care_status.setText("It did not finish. " + crash)
+            self.maint_status.setText("It did not finish. " + crash)
         elif self.error:
-            self.care_status.setText(self.error)
-        elif self.care_result:
+            self.maint_status.setText(self.error)
+        elif self.maint_result:
             if self.mode == "check":
-                self.checked[self.care_device] = bool(self.care_result.get("ok"))
-            self.care_status.setText(str(self.care_result.get("message", "")))
+                self.checked[self.maint_device] = bool(self.maint_result.get("ok"))
+            self.maint_status.setText(str(self.maint_result.get("message", "")))
         else:
-            self.care_status.setText(f"Ended without a result (exit {code}).")
+            self.maint_status.setText(f"Ended without a result (exit {code}).")
         self.set_busy(None)

@@ -94,7 +94,7 @@ On btrfs:
   touched. The message says whether another program was most likely writing to it (close it and run again) or
   the system's tool changed it (stop using it on that drive).
 
-## Care: check, repair, trim
+## Maintenance: check, repair, trim
 
 Pick a partition. It must be unmounted first (**Unmount**, on the left).
 

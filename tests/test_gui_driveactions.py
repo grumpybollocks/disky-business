@@ -92,7 +92,7 @@ class Rules(unittest.TestCase):
     def test_errors_in_plain_words(self):
         d = drive(Volume("sdz1", 1, "exfat", []))
         for error, word in (("org.freedesktop.UDisks2.Error.NotAuthorizedDismissed: x", "password was not given"),
-                            ("mount: wrong fs type, bad option, bad superblock", "Care tab"),
+                            ("mount: wrong fs type, bad option, bad superblock", "Maintenance tab"),
                             ("something new\nlast line", "It did not work: last line")):
             run, _ = service(fail_on="Mount", error=error)
             ok, text = da.mount(d, run)

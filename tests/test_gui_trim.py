@@ -32,11 +32,11 @@ class TrimTabTests(unittest.TestCase):
 
     def open(self, scenario, facts):
         self.win = MainWindow(theme=THEMES["w98"], drives=lambda: [],
-                              runners={"Care": EngineRunner([sys.executable, FAKE, scenario])})
+                              runners={"Maintenance": EngineRunner([sys.executable, FAKE, scenario])})
         self.addCleanup(self.win.close)
         self.win.show()
-        tab = next(p for p in self.win.pages if p.title == "Care")
-        self.assertEqual(tab.title, "Care")
+        tab = next(p for p in self.win.pages if p.title == "Maintenance")
+        self.assertEqual(tab.title, "Maintenance")
         tab.info_of = lambda folder: facts
         self.assertEqual(tab.wrap(), admin_wrap())     # the real tab asks through the system prompt
         tab.wrap = lambda: ["env", "PRETEND_PROMPT=1"]   # tests never call the real prompt
@@ -87,7 +87,7 @@ class TrimTabTests(unittest.TestCase):
         win = MainWindow(theme=THEMES["w98"], drives=lambda: [dr.Drive("EXAMPLE HDD", 1 << 40, "HDD", False,
                                                                        dr.Health())])
         self.addCleanup(win.close)
-        tab = next(p for p in win.pages if p.title == "Care")
+        tab = next(p for p in win.pages if p.title == "Maintenance")
         tab.panel.drive_list.setCurrentRow(0)
         self.assertEqual(tab.answer.text(), "Mount this drive first.")
         self.assertIn("Press Mount", tab.detail.text())
@@ -100,9 +100,9 @@ class TrimTabTests(unittest.TestCase):
                         dr.Volume("sdz3", 1 << 30, "btrfs", ["/games/library/shared/deep", "/more"]), dr.Volume("sdz4", 1, "ext4", [])],
                        path="/p/ssd")
         self.win = MainWindow(theme=THEMES["w98"], drives=lambda: [ssd],
-                              runners={"Care": EngineRunner([sys.executable, FAKE, "good"])})
+                              runners={"Maintenance": EngineRunner([sys.executable, FAKE, "good"])})
         self.addCleanup(self.win.close)
-        tab = next(p for p in self.win.pages if p.title == "Care")
+        tab = next(p for p in self.win.pages if p.title == "Maintenance")
         asked_about, started = [], []
         tab.info_of = lambda place: asked_about.append(place) or dict(YES, mount=place)
         tab.wrap = lambda: ["env", "PRETEND_PROMPT=1"]

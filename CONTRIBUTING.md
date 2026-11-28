@@ -32,8 +32,9 @@ scheme or an engine command is one entry ([docs/BRICKS.md](docs/BRICKS.md)).
 
 ## Known limits
 
-- The SMART table and the Care tab's checks before a job still wait for the system for a moment; a sleeping
-  drive can make that a few seconds. (Mount, Unmount, Safely remove and the health box no longer do.)
+- Before a check or repair, the Maintenance tab reads the drive list again, and that still waits for the system
+  for a moment. (Picking a drive, the Test tab's plan, the SMART table, Mount, Unmount, Safely remove and the
+  health box no longer do: a slow or failing drive cannot hold up the window there.)
 - A long self-test keeps the app busy until it ends or is stopped.
 - Self-tests are not offered for drives in USB cases.
 

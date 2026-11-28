@@ -24,7 +24,7 @@ ERRORS = (
     ("AlreadyMounted", "It is already mounted."),
     ("NotMounted", "It is not mounted."),
     ("NotSupported", "The system cannot do this with this drive."),
-    ("wrong fs type", "The system could not read its file system. It may be damaged: the Care tab can check and repair it."),
+    ("wrong fs type", "The system could not read its file system. It may be damaged: the Maintenance tab can check and repair it."),
     ("Timeout", "The drive did not answer in time."),
 )
 

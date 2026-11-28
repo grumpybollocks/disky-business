@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The Care tab: which partitions can be checked or repaired, what is said before a repair, and the runs."""
+"""The Maintenance tab: which partitions can be checked or repaired, what is said before a repair, and the runs."""
 import os
 import sys
 import time
@@ -11,7 +11,7 @@ from diskygui.drives import Drive, Health, Volume
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 try:
     from PySide6.QtWidgets import QApplication
-    from diskygui import caretab
+    from diskygui import maintenancetab
     from diskygui.runner import EngineRunner
     from diskygui.theme import THEMES
     from diskygui.window import MainWindow
@@ -32,17 +32,17 @@ def usb(*volumes, health=None):
 @unittest.skipUnless(HAVE_QT, "PySide6 not installed")
 class Words(unittest.TestCase):
     def test_which_partitions_can_be_worked_on(self):
-        a = caretab.advice
-        self.assertEqual(a(Volume("sdz1", 1, "exfat", []), HOME), (True, caretab.READY))
+        a = maintenancetab.advice
+        self.assertEqual(a(Volume("sdz1", 1, "exfat", []), HOME), (True, maintenancetab.READY))
         self.assertEqual(a(Volume("sdz1", 1, "ntfs", []), HOME), (False, fscare.NTFS_WHY))
         self.assertEqual(a(Volume("sdz1", 1, "exfat", ["/run/media/x/D"]), HOME),
-                         (False, caretab.MOUNTED.format(where="/run/media/x/D")))
-        self.assertEqual(a(Volume("nvme0n1p2", 1, "btrfs", ["/"]), HOME), (False, caretab.SYSTEM))
-        self.assertEqual(a(Volume("sdz1", 1, "ext4", ["/home/someone"]), HOME), (False, caretab.SYSTEM))
+                         (False, maintenancetab.MOUNTED.format(where="/run/media/x/D")))
+        self.assertEqual(a(Volume("nvme0n1p2", 1, "btrfs", ["/"]), HOME), (False, maintenancetab.SYSTEM))
+        self.assertEqual(a(Volume("sdz1", 1, "ext4", ["/home/someone"]), HOME), (False, maintenancetab.SYSTEM))
 
     def test_the_repair_question_holds_the_warnings_that_apply(self):
         v = Volume("sdz1", 1, "exfat", [])
-        q = caretab.repair_question
+        q = maintenancetab.repair_question
         for text in (q(v, None, False), q(v, True, False), q(v, False, True)):
             self.assertIn("Repair sdz1 (exFAT, 1 bytes)?", text)
             self.assertIn("copy them off first", text)
@@ -63,9 +63,9 @@ class Tab(unittest.TestCase):
 
     def open(self, scenario, drives):
         self.win = MainWindow(theme=THEMES["w98"], drives=lambda: drives or [],
-                              runners={"Care": EngineRunner([sys.executable, FAKE, scenario])})
+                              runners={"Maintenance": EngineRunner([sys.executable, FAKE, scenario])})
         self.addCleanup(self.win.close)
-        tab = next(p for p in self.win.pages if p.title == "Care")
+        tab = next(p for p in self.win.pages if p.title == "Maintenance")
         self.win.tabs.setCurrentWidget(tab)
         tab.info_of = lambda folder: None
         return tab
@@ -88,13 +88,13 @@ class Tab(unittest.TestCase):
         self.assertEqual(tab.parts.count(), 1)
         self.assertEqual(tab.parts.item(0).text().split()[:2], ["sdz1", "FAT"])           # an everyday name
         self.assertEqual((tab.picked().device, self.buttons(tab), tab.info.text()),
-                         ("sdz1", (True, True), caretab.READY))            # one partition: nothing to choose
+                         ("sdz1", (True, True), maintenancetab.READY))            # one partition: nothing to choose
         tab.check_button.click()
         self.assertEqual(self.buttons(tab), (False, False))                 # one job at a time
         self.assertFalse(self.win.tabs.tabBar().isEnabled())
         self.wait(tab)
         self.assertEqual(tab.runner.last_argv[-4:], ["fscheck", "sdz1", "--json", "--stdin-stop"])
-        self.assertEqual((tab.care_status.text(), tab.checked), ("Problems found.", {("/p/usb", "sdz1"): False}))
+        self.assertEqual((tab.maint_status.text(), tab.checked), ("Problems found.", {("/p/usb", "sdz1"): False}))
         asked = []
         tab.confirm = lambda text: asked.append(text) or False
         tab.repair_button.click()
@@ -106,15 +106,15 @@ class Tab(unittest.TestCase):
         self.wait(tab)
         self.assertEqual(tab.runner.last_argv[-5:], ["fsrepair", "sdz1", "--json", "--stdin-stop", "--yes"])
         self.assertIn("on EXAMPLE USB?", asked[0])
-        self.assertEqual(tab.care_status.text(), "Repaired.")
+        self.assertEqual(tab.maint_status.text(), "Repaired.")
 
     def test_nothing_is_offered_where_it_must_not_run(self):
         tab = self.open("good", [usb(Volume("sdz1", 1, "ntfs", []), Volume("sdz2", 1, "exfat", ["/run/media/x/D"]),
                                      Volume("sdz3", 1, "ext4", []))])
         tab.panel.drive_list.setCurrentRow(0)
         self.assertEqual((tab.picked(), self.buttons(tab), tab.info.text()), (None, (False, False), "Pick a partition."))
-        for row, text, ready in ((0, fscare.NTFS_WHY, False), (1, caretab.MOUNTED.format(where="/run/media/x/D"), False),
-                                 (2, caretab.READY, True)):
+        for row, text, ready in ((0, fscare.NTFS_WHY, False), (1, maintenancetab.MOUNTED.format(where="/run/media/x/D"), False),
+                                 (2, maintenancetab.READY, True)):
             tab.parts.setCurrentRow(row)
             self.assertEqual((tab.info.text(), self.buttons(tab)), (text, (ready, ready)))
         started = []
@@ -136,20 +136,20 @@ class Tab(unittest.TestCase):
         tab.panel.drive_list.setCurrentRow(0)
         tab.check_button.click()
         self.wait(tab)
-        self.assertEqual(tab.care_status.text(), "No problems found.")
+        self.assertEqual(tab.maint_status.text(), "No problems found.")
         started = []
         tab.runner.start = lambda *a, **k: started.append(a)
         tab.confirm = lambda text: True
         # Refresh with nothing changed: the pick is gone, so are the partitions and the buttons.
         tab.panel.refresh.click()
-        self.assertEqual((tab.parts.count(), self.buttons(tab), tab.care_status.text()), (0, (False, False), ""))
+        self.assertEqual((tab.parts.count(), self.buttons(tab), tab.maint_status.text()), (0, (False, False), ""))
         # The drive is swapped for another that got the same name sdz, and the list is not read again.
         tab.panel.drive_list.setCurrentRow(0)
         now[:] = [second]
         tab.repair_button.click()
         tab.check_button.click()
         self.assertEqual(started, [])
-        self.assertIn("The drives changed", tab.care_status.text())
+        self.assertIn("The drives changed", tab.maint_status.text())
         # Picking the new drive: nothing of the first one is remembered.
         tab.panel.drive_list.setCurrentRow(0)
         self.assertEqual(tab.panel.current_drive().model, "ANOTHER DRIVE")
@@ -164,7 +164,7 @@ class Tab(unittest.TestCase):
         tab.panel.drive_list.setCurrentRow(0)
         tab.check_button.click()
         self.wait(tab)
-        self.assertEqual(tab.care_status.text(), "It is mounted. Unmount it first.")
+        self.assertEqual(tab.maint_status.text(), "It is mounted. Unmount it first.")
         asked = []
         tab.confirm = lambda text: asked.append(text) or False
         tab.repair_button.click()

@@ -18,7 +18,7 @@ from .mapmodel import MapModel
 from .mapwidget import BlockMap
 from .runner import EngineRunner
 from .adminsession import AdminSession
-from .caretab import CareTab
+from .maintenancetab import MaintenanceTab
 from .defragtab import DefragTab
 from .smarttab import SmartTab
 from .speedtab import SpeedTab
@@ -316,7 +316,7 @@ TIP_SECONDS = 30            # how long one tip stays; long enough to read it and
 
 
 class MainWindow(QMainWindow):
-    TABS = (TestTab, SpeedTab, SmartTab, DefragTab, CareTab)
+    TABS = (TestTab, SpeedTab, SmartTab, DefragTab, MaintenanceTab)
 
     def __init__(self, theme=None, runner=None, drives=None, runners=None, admin=None):
         runners = dict(runners or {})

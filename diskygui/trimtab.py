@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
-"""The TRIM part of the Care tab: says whether the drive accepts TRIM, and runs it through the system's
-password prompt. On its own it is a complete tab; caretab.py builds on it."""
+"""The TRIM part of the Maintenance tab: says whether the drive accepts TRIM, and runs it through the system's
+password prompt. On its own it is a complete tab; maintenancetab.py builds on it."""
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from disky import trim

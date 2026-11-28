@@ -44,8 +44,8 @@ add its events to `contract.EVENTS` and its mode to `contract.MODES`, describe t
 | Colour scheme | `diskygui/theme.py` | `THEMES` | a `Theme`: window colours, Test-map colours (`states`), Defrag-map colours (`frag`), fonts (with a smoothed fallback when the crisp fonts are missing), block styles | `test_gui_window.py`, `test_gui_lego.py` |
 | Block style | `diskygui/blockstyles.py` | `STYLES` | a `BlockStyle`: size, gap, a function that draws one square | `test_gui_lego.py` |
 | Widget look | `diskygui/chrome.py` | — | `stylesheet(theme)` and `font(theme)`; edges are small pictures made from the theme's colours | seen in `test_gui_window.py` |
-| Tab | `diskygui/window.py` | `MainWindow.TABS` | a `TabBase` subclass (Test, Speed, SMART, Defrag, Care) | `test_gui_lego.py` |
-| Care tab | `diskygui/caretab.py` (on `trimtab.py`) | — | partitions of the picked drive; `advice(volume)` says whether it can be worked on and why not; `repair_question(...)` holds the warnings shown before a repair | `test_gui_care.py`, `test_gui_trim.py` |
+| Tab | `diskygui/window.py` | `MainWindow.TABS` | a `TabBase` subclass (Test, Speed, SMART, Defrag, Maintenance) | `test_gui_lego.py` |
+| Maintenance tab | `diskygui/maintenancetab.py` (on `trimtab.py`) | — | partitions of the picked drive; `advice(volume)` says whether it can be worked on and why not; `repair_question(...)` holds the warnings shown before a repair | `test_gui_maintenance.py`, `test_gui_trim.py` |
 | Admin session | `diskygui/adminsession.py` | — | one password prompt for the whole window; a runner hands admin jobs to it | `test_gui_admin.py` |
 | Button icons | `diskygui/icons.py` | `SHAPES`, `BUTTON_ICONS` | a drawn shape; which button text gets which icon (modern looks only) | `test_gui_lego.py` |
 | Tab base | `diskygui/tabbase.py` | — | drive panel, engine runner, busy signal, legend helper, shutdown | every tab test |

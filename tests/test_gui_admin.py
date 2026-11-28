@@ -118,7 +118,7 @@ class Session(unittest.TestCase):
         self.addCleanup(win.close)
         self.assertTrue(all(p.runner.session is s for p in win.pages))
         self.assertTrue(win.admin_button.isHidden())
-        care = next(p for p in win.pages if p.title == "Care")
+        care = next(p for p in win.pages if p.title == "Maintenance")
         self.assertIn("once for this session", care.password_words())
         r = self.runner(s)
         r.start("trim", "/drive/folder", wrap=PROMPT)
