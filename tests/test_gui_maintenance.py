@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The Maintenance tab: which partitions can be checked or repaired, what is said before a repair, and the runs."""
+import tests
 import os
 import sys
 import time
@@ -108,7 +109,7 @@ class Tab(unittest.TestCase):
         tab.check_button.click()
         tab.panel.settle()
         self.assertEqual(self.buttons(tab), (False, False))                 # one job at a time
-        self.assertFalse(self.win.tabs.tabBar().isEnabled())
+        self.assertTrue(tests.others_locked(self.win, tab))
         self.wait(tab)
         self.assertEqual(tab.runner.last_argv[-6:], ["fscheck", "sdz1", "--json", "--stdin-stop", "--expect", "vfat:1073741824"])
         self.assertEqual((tab.maint_status.text(), tab.checked), ("sdz1: Problems found.", {("/p/usb", "sdz1"): False}))

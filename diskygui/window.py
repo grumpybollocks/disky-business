@@ -435,13 +435,9 @@ class MainWindow(QMainWindow):
         self.setFont(f)
 
     def on_tab(self, index):
-        """The drive picked on one tab is the drive on the next. While a tab works, no other can be opened,
-        also not with the keyboard (Ctrl+Tab), so two jobs never run at once."""
-        busy = next((i for i, p in enumerate(self.pages) if p.working), None)
-        if busy is not None and index != busy:
-            self.tabs.blockSignals(True)
-            self.tabs.setCurrentIndex(busy)
-            self.tabs.blockSignals(False)
+        """The drive picked on one tab is the drive on the next. While a tab works the others can be looked at
+        but are locked; such a tab takes the drive over when the work is done."""
+        if any(p.working for p in self.pages):
             return
         self.pages[index].panel.adopt(self.pages[self._tab].panel)
         if self._held and index != self._tab:           # a message from the last tab means nothing on this one
@@ -478,9 +474,13 @@ class MainWindow(QMainWindow):
             self.admin.end()
 
     def on_busy(self, busy):
-        """One job at a time: while a tab works, the others cannot be opened."""
-        self.tabs.tabBar().setEnabled(not any(p.working for p in self.pages))
-        working = any(p.working for p in self.pages)
+        """One job at a time: while a tab works, the others can be looked at and nothing more."""
+        worker = next((p for p in self.pages if p.working), None)
+        for page in self.pages:
+            page.set_locked(worker.title if worker is not None and page is not worker else None)
+        working = worker is not None
+        if not working and self.tabs.currentIndex() != self._tab:
+            self.on_tab(self.tabs.currentIndex())       # the tab looked at meanwhile now takes the drive over
         self.admin_button.setEnabled(not working)       # it cannot end under a running job: say so, not nothing
         self.admin_button.setToolTip("A job is running: the admin session can be ended when it is done." if working
                                      else ADMIN_TIP)

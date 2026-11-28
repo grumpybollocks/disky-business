@@ -79,3 +79,16 @@ def _first_drive_list_before_the_test_goes_on():
 
 
 _first_drive_list_before_the_test_goes_on()
+
+
+def others_locked(win, tab):
+    """While `tab` works: every other tab can be opened, and on each the drive panel and every button is off."""
+    from PySide6.QtWidgets import QPushButton
+    others = [p for p in win.pages if p is not tab]
+    return bool(others) and all(
+        p.locked_by == tab.title and not p.panel.isEnabled() and not p.lock_note.isHidden()
+        and not any(w.isEnabled() for w in vars(p).values() if isinstance(w, QPushButton)) for p in others)
+
+
+def none_locked(win):
+    return all(p.locked_by is None and p.panel.isEnabled() and p.lock_note.isHidden() for p in win.pages)

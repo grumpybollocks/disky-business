@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """Drive list and health, on made-up udisks2 answers (same shape as `busctl --json=short` gives)."""
+import tests
 import os
 import subprocess
 import sys
@@ -347,15 +348,15 @@ class InTheWindow(unittest.TestCase):
         tab.refresh.click()
         self.assertEqual((tab.folder, tab.go.isEnabled()), ("", False))
 
-    def test_no_other_tab_opens_while_one_works_not_even_by_keyboard(self):
+    def test_other_tabs_open_but_locked_while_one_works(self):
         tab = self.open([])
         win = tab.window()
         tab.set_busy("test")
-        win.tabs.setCurrentIndex(1)                             # what Ctrl+Tab does
-        self.assertEqual(win.tabs.currentIndex(), 0)
+        win.tabs.setCurrentIndex(1)                             # also what Ctrl+Tab does
+        self.assertEqual(win.tabs.currentIndex(), 1)            # it can be looked at
+        self.assertTrue(tests.others_locked(win, tab))          # and nothing more
         tab.set_busy(None)
-        win.tabs.setCurrentIndex(1)
-        self.assertEqual(win.tabs.currentIndex(), 1)
+        self.assertTrue(tests.none_locked(win))
 
     def test_folder_line_only_where_a_tab_uses_one(self):
         tab = self.open([])

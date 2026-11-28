@@ -7,6 +7,8 @@ import time
 import unittest
 from unittest import mock
 
+import tests
+
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 try:
     from PySide6.QtWidgets import QApplication
@@ -104,7 +106,7 @@ class Hunt(unittest.TestCase):
         self.assertFalse(tab.go.isEnabled())                    # no test on a drive being unmounted
         self.assertFalse(tab.panel.drive_list.isEnabled())
         win.tabs.setCurrentIndex(1)
-        self.assertEqual(win.tabs.currentIndex(), 0)            # and no other tab, with its own Mount button
+        self.assertTrue(tests.others_locked(win, tab))          # and no other tab's Mount button either
         tab.panel.settle()
         self.assertTrue(tab.panel.drive_list.isEnabled())
 
@@ -255,12 +257,9 @@ class Hunt(unittest.TestCase):
         win, tab = self.maintenance([d])
         tab.panel.read_drives = lambda: (time.sleep(0.5), [d])[1]
         tab.confirm = lambda text: False                        # the question comes; the answer is no
-        here = win.tabs.currentIndex()
         tab.repair_button.click()
         self.assertTrue(tab.verifying and tab.working)
-        self.assertFalse(win.tabs.tabBar().isEnabled())
-        win.tabs.setCurrentIndex(1)                             # what Ctrl+Tab does
-        self.assertEqual(win.tabs.currentIndex(), here)         # the question never appears over another tab
+        self.assertTrue(tests.others_locked(win, tab))
         asked = []
         win.confirm_close = lambda text: asked.append(text) or False
         win.close()
@@ -268,8 +267,54 @@ class Hunt(unittest.TestCase):
         self.assertEqual(asked, [window.CLOSE_DRIVE])
         tab.panel.settle()
         self.assertFalse(tab.working)
-        self.assertTrue(win.tabs.tabBar().isEnabled())
+        self.assertTrue(tests.none_locked(win))
         win.confirm_close = lambda text: True
+
+    def test_a_locked_tab_starts_nothing_whatever_is_clicked(self):
+        from PySide6.QtWidgets import QPushButton
+        folder = self.folder()
+        win = self.open([drive("A", [folder]), drive("B", [self.folder()])])
+        for worker in win.pages:
+            win.tabs.setCurrentWidget(worker)
+            worker.panel.settle()
+            worker.panel.drive_list.setCurrentRow(0)
+            worker.panel.settle()
+            worker.set_busy("work")
+            self.assertTrue(tests.others_locked(win, worker), worker.title)
+            for p in win.pages:
+                if p is worker:
+                    continue
+                win.tabs.setCurrentWidget(p)                    # looking is allowed
+                self.assertIs(win.tabs.currentWidget(), p)
+                started = []
+                with mock.patch.object(p.runner, "start", lambda *a, **k: started.append(a)):
+                    p.update_buttons()                          # the tab's own rules run again: the lock still holds
+                    p.on_folder(p.folder, "")
+                    for w in vars(p).values():
+                        if isinstance(w, QPushButton):
+                            w.click()
+                    for w in (p.panel.refresh, p.panel.mount_button, p.panel.unmount_button, p.panel.remove_button,
+                              p.panel.choose):
+                        w.click()
+                    with self.assertRaises(RuntimeError):       # and the last line of defence
+                        p.set_busy("second")
+                self.assertEqual((started, p.mode, p.working), ([], None, False), p.title)
+                self.assertIn(worker.title, p.lock_note.text())
+            worker.set_busy(None)
+            self.assertTrue(tests.none_locked(win), worker.title)
+
+    def test_a_tab_looked_at_meanwhile_takes_the_drive_over_when_the_work_is_done(self):
+        win = self.open([drive("A", [self.folder()]), drive("B", [self.folder()])])
+        tab, other = win.pages[0], win.pages[1]
+        tab.panel.drive_list.setCurrentRow(1)
+        tab.panel.settle()
+        tab.set_busy("work")
+        win.tabs.setCurrentIndex(1)
+        self.assertNotEqual(other.panel.row(), 1)               # nothing moves on a locked tab
+        tab.set_busy(None)
+        other.panel.settle()
+        self.assertEqual((other.panel.row(), other.panel.folder), (1, tab.panel.folder))
+        self.assertTrue(other.go.isEnabled())                   # and its own buttons are back
 
     def test_c3_the_drive_is_read_once_more_after_the_yes(self):
         first, second = drive("A", [], usb=True, path="/p/a"), drive("B", [], usb=True, path="/p/b")

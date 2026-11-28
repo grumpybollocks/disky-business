@@ -5,10 +5,10 @@ A new tab subclasses TabBase, sets `title` and `NOTE`, builds its right-hand sid
 fills in the hooks at the bottom. Put the class in window.MainWindow.TABS and it appears.
 """
 from PySide6.QtCore import Signal
-from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QVBoxLayout,
-                               QWidget)
+from PySide6.QtWidgets import (QFrame, QGridLayout, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton,
+                               QVBoxLayout, QWidget)
 
-from .drivepanel import DrivePanel
+from .drivepanel import DrivePanel, _QuietLabel
 from .runner import EngineRunner
 
 
@@ -91,6 +91,38 @@ class TabBase(QWidget):
         self.panel.changed.connect(self.on_folder)
         self.panel.working_changed.connect(self.working_changed)
         self.verifying = False                          # a drive is being read again before a job starts
+        self.locked_by = None                           # the title of the tab that works, while another one does
+        self.lock_note = _QuietLabel("")
+        self.lock_note.setObjectName("locknote")
+        self.lock_note.setWordWrap(True)
+
+    def __init_subclass__(cls, **kw):
+        """Whatever a tab's own update_buttons decides, the lock has the last word: a tab cannot forget it."""
+        super().__init_subclass__(**kw)
+        own = cls.__dict__.get("update_buttons")
+        if own is not None:
+            def update_buttons(self, _own=own):
+                _own(self)
+                self.apply_lock()
+            cls.update_buttons = update_buttons
+
+    def set_locked(self, title):
+        """Another tab works (its title) or none does (None). A locked tab can be looked at, nothing more: one
+        job at a time."""
+        if title != self.locked_by:
+            self.locked_by = title
+            self.lock_note.setText(f"The {title} tab is working. This tab can be used again when it is done."
+                                   if title else "")
+            self.update_buttons()
+
+    def apply_lock(self):
+        """While locked: every button of this tab and its whole drive panel are off. Every button, not a list of
+        them, so a button added later is covered without anyone thinking of it."""
+        self.panel.setEnabled(self.locked_by is None)
+        if self.locked_by is not None:
+            for widget in list(vars(self).values()):
+                if isinstance(widget, QPushButton):
+                    widget.setEnabled(False)
 
     # -- helpers for building the right-hand side ------------------------------------------------------------
     def progress_line(self):
@@ -129,9 +161,12 @@ class TabBase(QWidget):
             sw.setStyleSheet(f"background: {colours[key]};")
 
     def assemble(self, right):
-        row = QHBoxLayout(self)
+        col = QVBoxLayout(self)
+        col.addWidget(self.lock_note)
+        row = QHBoxLayout()
         row.addWidget(self.panel)
         row.addLayout(right, 1)
+        col.addLayout(row, 1)
 
     # -- shared behaviour ------------------------------------------------------------------------------------
     @property
@@ -188,6 +223,8 @@ class TabBase(QWidget):
     def set_busy(self, mode):
         """Enter a job (a name) or leave it (None). Tells the window, which locks the other tabs."""
         was = self.mode
+        if mode is not None and self.locked_by is not None:
+            raise RuntimeError(f"a job on this tab while the {self.locked_by} tab works")    # never two jobs
         self.mode = mode
         if mode is None:
             for line in self.progress_lines:
@@ -218,6 +255,7 @@ class TabBase(QWidget):
 
     def update_buttons(self):
         self.panel.set_busy(self.mode is not None)
+        self.apply_lock()
 
     def on_folder(self, folder, hint):
         self.update_buttons()

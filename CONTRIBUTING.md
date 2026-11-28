@@ -32,7 +32,7 @@ scheme or an engine command is one entry ([docs/BRICKS.md](docs/BRICKS.md)).
 
 ## Known limits
 
-- A long self-test keeps the app busy until it ends or is stopped, and the other tabs cannot be opened meanwhile.
+- One job at a time: while a tab works (a long self-test too), the other tabs can be looked at but start nothing.
 - Self-tests are not offered for drives in USB cases.
 - No keyboard shortcuts yet (refresh, stop, quit).
 - The Speed tab shows no progress bar or time left.

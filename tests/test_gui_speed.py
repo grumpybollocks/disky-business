@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-3.0-or-later
 """The Speed tab and the tab switching, with a pretend engine, drawn off-screen."""
+import tests
 import os
 import sys
 import time
@@ -81,12 +82,12 @@ class SpeedTabTests(unittest.TestCase):
         tab.go.click()
         self.wait(lambda: len(tab.graph.samples["seq_write"]) > 2)
         self.assertEqual(tab.go.text(), "Stop")
-        self.assertFalse(self.win.tabs.tabBar().isEnabled())       # no second job on another tab meanwhile
+        self.assertTrue(tests.others_locked(self.win, tab))         # no second job on another tab meanwhile
         tab.go.click()
         self.wait(lambda: tab.mode is None, 3.0)
         self.assertFalse(tab.runner.running())
         self.assertEqual(tab.status.text(), "Stopped. The temporary file was removed.")
-        self.assertTrue(self.win.tabs.tabBar().isEnabled())
+        self.assertTrue(tests.none_locked(self.win))
 
     def test_engine_error_and_crash_are_shown(self):
         self.assertEqual(self.run_to_end("refuse").status.text(), "A speed-test file from an earlier run is still there.")

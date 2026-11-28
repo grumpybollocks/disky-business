@@ -218,7 +218,7 @@ class Window(unittest.TestCase):
         tab.set_folder("/a/folder")
         tab.go.click()
         self.wait(lambda: tab.mode is None)
-        self.assertTrue(tab.window().tabs.tabBar().isEnabled())
+        self.assertTrue(all(p.locked_by is None and p.panel.isEnabled() for p in tab.window().pages))
 
     def test_W6_exfat_scan_asks_before_the_password_prompt(self):
         tab = self.window("Defrag", "good")
