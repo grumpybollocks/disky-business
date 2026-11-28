@@ -130,6 +130,13 @@ QHeaderView::section {{ background: {t.face}; color: {t.muted}; border: none; bo
 #mapframe {{ background: {t.map_bg}; border: 1px solid {t.border}; border-radius: 10px; }}
 #tipline {{ color: {t.muted}; padding: 6px 4px; }}
 #health {{ background: {t.field}; border: 1px solid {t.border}; border-radius: 9px; padding: 8px 10px; }}
+#health[state="ok"] {{ border-left: 4px solid {t.states["good"]}; }}
+#health[state="warn"] {{ border-left: 4px solid {t.states["changed"]}; }}
+#health[state="bad"] {{ border-left: 4px solid {t.states["bad"]}; }}
+#locknote {{ background: {t.field}; border: 1px solid {t.states["changed"]}; border-left: 4px solid {t.states["changed"]};
+            border-radius: 9px; padding: 8px 10px; font-weight: bold; }}
+#intro {{ color: {t.muted}; }}
+QTableWidget::item {{ border-bottom: 1px solid {t.border}; }}
 #themebutton {{ margin: 4px 6px; padding: 5px 12px; }}
 #heading {{ font-weight: bold; color: {t.muted}; }}
 #status {{ font-size: {px + 1}px; font-weight: bold; }}

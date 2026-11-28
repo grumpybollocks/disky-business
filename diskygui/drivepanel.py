@@ -102,6 +102,20 @@ LOOKING = "Looking at the drive..."
 READING = "Reading the drive list..."
 
 
+class _HealthLabel(_QuietLabel):
+    """The health box. It carries a `state` the style sheet can colour: "ok", "warn", "bad" or ""."""
+
+    def setText(self, text):
+        super().setText(text)
+        first = text.split("\n", 1)[0]
+        state = ("bad" if "FAILING" in first or "WARNING" in first else "warn" if "Warning:" in text
+                 else "ok" if first == "Health: OK" else "")
+        if state != self.property("state"):
+            self.setProperty("state", state)
+            self.style().unpolish(self)                 # the style sheet reads the property again
+            self.style().polish(self)
+
+
 class DrivePanel(QWidget):
     changed = Signal(str, str)      # folder ("" when there is none), a line to show the user ("" when none)
     working_changed = Signal()      # a drive action began or ended: tabs lock or free what depends on the drive
@@ -159,7 +173,7 @@ class DrivePanel(QWidget):
         buttons.addWidget(self.remove_button, 0, 1)
         buttons.addWidget(self.mount_button, 1, 0)
         buttons.addWidget(self.unmount_button, 1, 1)
-        self.health = _QuietLabel()
+        self.health = _HealthLabel()
         self.health.setObjectName("health")
         self.health.setWordWrap(True)
         self.health.setMinimumHeight(84)

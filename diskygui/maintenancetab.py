@@ -67,6 +67,7 @@ class MaintenanceTab(TrimTab):
         self.maint_result = None
         self.verifying = False                      # the drive is being read again before a job
         about = QLabel(ABOUT)
+        about.setObjectName("intro")
         about.setWordWrap(True)
         head = QLabel("Partitions")
         head.setObjectName("heading")

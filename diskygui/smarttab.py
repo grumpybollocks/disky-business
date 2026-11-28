@@ -47,6 +47,7 @@ class SmartTab(TabBase):
         self.deep_view = None
         self.rows = []
         about = QLabel(ABOUT)
+        about.setObjectName("intro")
         about.setWordWrap(True)
         box = QFrame()
         box.setObjectName("verdict")
@@ -73,6 +74,8 @@ class SmartTab(TabBase):
             self.glance_boxes.append((tile, value, name))
             tile.hide()
         self.table = QTableWidget(0, len(COLUMNS))
+        self.table.setShowGrid(not theme.flat)
+        self.table.horizontalHeader().sectionResized.connect(self.fit_rows)
         self.table.setHorizontalHeaderLabels(COLUMNS)
         self.table.verticalHeader().setVisible(False)
         self.table.verticalHeader().setDefaultSectionSize(self.table.fontMetrics().height() + 6)
@@ -341,6 +344,11 @@ class SmartTab(TabBase):
         if problem:
             self.detail.setText(problem)
 
+    def fit_rows(self, *section):
+        """A column changed its width (the window, or a scroll bar that came or went): wrapped text needs its
+        rows measured again, or it is cut off."""
+        self.table.resizeRowsToContents()
+
     def update_buttons(self):
         d = self.panel.current_drive()
         self.usb_button.setVisible(bool(d and not d.smart and d.device))
@@ -360,4 +368,5 @@ class SmartTab(TabBase):
 
     def set_theme(self, theme):
         self.theme = theme
+        self.table.setShowGrid(not theme.flat)          # the modern looks draw a thin line under each row instead
         self.fill()

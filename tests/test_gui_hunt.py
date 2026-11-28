@@ -316,6 +316,30 @@ class Hunt(unittest.TestCase):
         self.assertEqual((other.panel.row(), other.panel.folder), (1, tab.panel.folder))
         self.assertTrue(other.go.isEnabled())                   # and its own buttons are back
 
+    def test_looks_the_health_box_says_its_state_and_the_table_keeps_its_text(self):
+        from diskygui.chrome import stylesheet
+        from diskygui.drivepanel import _HealthLabel
+        box = _HealthLabel()
+        seen = []
+        for text in ("Health: OK\n31 C", "Health: OK\nWarning: Cable errors: 2", "Health: FAILING",
+                     "Health: WARNING (spare low)", "No health data.", ""):
+            box.setText(text)
+            seen.append(box.property("state"))
+        self.assertEqual(seen, ["ok", "warn", "bad", "bad", "", ""])
+        win = self.open([drive("A", [self.folder()])])
+        tab = self.page(win, "SMART")
+        self.assertTrue(tab.table.showGrid())                   # the old looks keep their grid
+        win.set_theme(THEMES["modern"])
+        self.assertFalse(tab.table.showGrid())                  # the modern ones draw a line under each row
+        sheet = stylesheet(THEMES["modern"])
+        for rule in ('#health[state="warn"]', "#locknote", "#intro", "QTableWidget::item {"):
+            self.assertIn(rule, sheet)
+        self.assertNotIn("padding", sheet.split("QTableWidget::item {")[1].split("}")[0])   # padding cut the text
+        self.assertEqual(tab.lock_note.objectName(), "locknote")
+        with mock.patch.object(tab.table, "resizeRowsToContents") as again:
+            tab.table.horizontalHeader().resizeSection(0, tab.table.columnWidth(0) + 40)
+        self.assertTrue(again.called)                           # wrapped text is measured again
+
     def test_c3_the_drive_is_read_once_more_after_the_yes(self):
         first, second = drive("A", [], usb=True, path="/p/a"), drive("B", [], usb=True, path="/p/b")
         now = [first]

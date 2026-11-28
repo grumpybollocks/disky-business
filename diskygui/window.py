@@ -162,6 +162,7 @@ class TestTab(TabBase):
         bottom.addLayout(buttons)
 
         caption = QLabel("Test map: every part of the drive is written, then read back")
+        caption.setObjectName("heading")
         caption.setObjectName("caption")
         right = QVBoxLayout()
         right.addWidget(caption)

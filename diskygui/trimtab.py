@@ -33,6 +33,7 @@ class TrimTab(TabBase):
         self.facts = None
         self.result = None
         about = QLabel(ABOUT)
+        about.setObjectName("intro")
         about.setWordWrap(True)
         box = QFrame()
         box.setObjectName("verdict")
