@@ -246,6 +246,7 @@ class Tab(unittest.TestCase):
         tab.read_smart = lambda d: smart.read(d, run=answer(ATA), names_of=lambda *drive: NAMES)
         self.assertEqual((tab.answer.text(), tab.again.isEnabled()), ("Choose a drive.", False))   # nothing picked
         tab.panel.drive_list.setCurrentRow(0)
+        self.assertTrue(tab.panel.settle())
         self.assertEqual(tab.answer.text(), "The drive says it is failing. Copy your files off it now.")
         self.assertEqual(tab.table.rowCount(), 8)                       # the 8 that matter
         self.assertIn('the other 2', tab.detail.text())
@@ -274,6 +275,7 @@ class Tab(unittest.TestCase):
         tab = SmartTab(THEMES[DEFAULT_THEME], drives=lambda: [drive("nvme")])
         tab.read_smart = lambda d: smart.read(d, run=answer(NVME))
         tab.panel.drive_list.setCurrentRow(0)
+        self.assertTrue(tab.panel.settle())
         self.assertTrue(all(tab.table.isColumnHidden(c) for c in (3, 4, 5)))
         self.assertEqual([n.text() for t, v, n in tab.glance_boxes if not t.isHidden()],
                          ["Life used", "Temperature", "Data written", "Times switched on"])

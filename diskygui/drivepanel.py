@@ -52,6 +52,9 @@ def fresh(read_drives, drive):
     return next((x for x in read_drives() if x.path and x.path == drive.path), None)
 
 
+LOOKING = "Looking at the drive..."
+
+
 class DrivePanel(QWidget):
     changed = Signal(str, str)      # folder ("" when there is none), a line to show the user ("" when none)
 
@@ -78,6 +81,8 @@ class DrivePanel(QWidget):
         self.busy = False
         self.acting = False
         self.jobs = []                                  # slow work under way; the window stays usable meanwhile
+        self.looking = None                             # the drive whose folder is being looked for
+        self.looks = 0
         self.collector = QTimer(self)
         self.collector.setInterval(40)
         self.collector.timeout.connect(self.collect)
@@ -237,13 +242,31 @@ class DrivePanel(QWidget):
         self.show_note()
         self.update_actions()
         if d is None:
+            self.looking = None
             return
-        folder, why = d.target()
         self.health.setText("\n".join(self.health_lines(d)))
         if d.smart:                                     # wear and warnings follow when the drive has answered
             read = self.read_smart                      # the job holds no widget (see `act`)
             self.later(lambda: read(d), self.health_read, d)
-        self.set_folder(folder or "", why or "Press Start.")
+        self.look(d)
+
+    def look(self, d):
+        """Find the drive's folder off the window's thread: a slow or failing drive must not hold up the
+        window (a USB disk with a read error hung it for a minute)."""
+        self.set_folder("", LOOKING)
+        self.looks += 1                                 # only the newest look counts: answers can come late
+        self.looking = d.path
+        self.later(d.target, self.target_read, d, self.looks)
+
+    def target_read(self, d, number, result):
+        now = self.current_drive()
+        if now is None or now.path != d.path or self.looking != d.path or number != self.looks:
+            return                                      # another drive or folder was picked meanwhile
+        if isinstance(result, tuple):
+            folder, why = result
+            self.set_folder(folder or "", why or "Press Start.")
+        else:
+            self.set_folder("", f"The drive did not answer: {result}")
 
     def health_lines(self, d):
         """Health, temperature and hours, then wear and warnings from the drive's SMART record."""
@@ -265,6 +288,7 @@ class DrivePanel(QWidget):
             self.set_folder(path)
 
     def set_folder(self, path, hint=""):
+        self.looking = None                             # a folder chosen by hand wins over a late answer
         self.folder = path
         self.folder_box.setText(path)
         self.changed.emit(path, hint)
@@ -290,4 +314,8 @@ class DrivePanel(QWidget):
         self.action_note.setText("")
         self.show_note()
         self.update_actions()
+        if other.looking is not None and self.current_drive() is not None:
+            self.look(self.current_drive())             # the other tab is still waiting for the drive
+            return
+        self.looking = None
         self.set_folder(other.folder, "Press Start." if other.folder else "")

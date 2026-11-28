@@ -246,6 +246,7 @@ class InTheWindow(unittest.TestCase):
                          [d.label for d in found])
         self.assertEqual((tab.drive_list.currentRow(), tab.go.isEnabled(), tab.health.text()), (-1, False, ""))  # nothing is picked for the user
         tab.drive_list.setCurrentRow(2)                         # the unmounted HDD
+        tab.panel.settle()
         self.assertEqual(tab.health.text(), "Health: OK\n29 °C   64 535 hours")
         self.assertEqual((tab.folder, tab.go.isEnabled()), ("", False))
         self.assertIn("Press Mount", tab.status.text())
@@ -273,18 +274,75 @@ class InTheWindow(unittest.TestCase):
         return [dr.Drive("EXAMPLE USB", 1 << 30, "SSD", True, dr.Health(),
                          [dr.Volume("sdz1", 1 << 30, "ext4", [folder], False)])], folder
 
+    # A drive that is slow or failing must never hold up the window (a 250 GB USB disk with a read error hung
+    # it for a minute): everything that touches the drive happens off the window's thread.
+    SLOW = 1.5
+
+    def timed(self, act):
+        import time
+        start = time.monotonic()
+        act()
+        return time.monotonic() - start
+
+    def test_picking_a_slow_drive_does_not_hold_up_the_window(self):
+        import time
+        found, folder = self.mounted()
+        found[0].target = lambda *a, **k: (time.sleep(self.SLOW), (folder, ""))[1]
+        tab = self.open(found)
+        tab.plan_of = lambda f: "plan"
+        self.assertLess(self.timed(lambda: tab.drive_list.setCurrentRow(0)), 0.5)
+        self.assertIn("Looking at the drive", tab.status.text())
+        self.assertTrue(tab.panel.settle())
+        self.assertEqual(tab.folder, folder)
+        self.assertEqual(tab.plan.text(), "plan")
+
+    def test_a_slow_folder_does_not_hold_up_the_test_tab(self):
+        import time
+        found, folder = self.mounted()
+        tab = self.open(found)
+        tab.plan_of = lambda f: (time.sleep(self.SLOW), "plan")[1]
+        self.assertLess(self.timed(lambda: (tab.drive_list.setCurrentRow(0), tab.panel.settle(0.3))), 0.8)
+        self.assertTrue(tab.panel.settle())
+        self.assertEqual(tab.plan.text(), "plan")
+
+    def test_a_late_answer_never_replaces_a_newer_one(self):
+        import time
+        found, folder = self.mounted()
+        tab = self.open(found)
+        answers = iter([(0.8, "old"), (0.0, "new")])
+        tab.plan_of = lambda f: (lambda wait, text: (time.sleep(wait), text)[1])(*next(answers))
+        tab.set_folder(folder)
+        tab.set_folder(folder)                                  # asked again: this answer comes back first
+        self.assertTrue(tab.panel.settle())
+        self.assertEqual(tab.plan.text(), "new")
+
+    def test_a_slow_smart_read_does_not_hold_up_the_smart_tab(self):
+        import time
+        from diskygui.smart import Row
+        ssd = dr.Drive("EXAMPLE SSD", 1 << 30, "SSD", False, dr.Health("ok", "Health: OK", 30, 100), smart="ata",
+                       path="/p")
+        smart_tab = next(p for p in self.open([ssd]).window().pages if p.title == "SMART")
+        smart_tab.window().tabs.setCurrentWidget(smart_tab)
+        slow = lambda d: (time.sleep(self.SLOW), ([Row("Life left", "85 %")], ""))[1]
+        smart_tab.read_smart = smart_tab.panel.read_smart = slow
+        self.assertLess(self.timed(lambda: smart_tab.panel.drive_list.setCurrentRow(0)), 0.5)
+        self.assertTrue(smart_tab.panel.settle())
+        self.assertEqual([r.name for r in smart_tab.rows], ["Life left"])
+
     def test_keyboard_focus_picks_no_drive(self):
         found, _ = self.mounted()
         tab = self.open(found)
         QApplication.sendEvent(tab.drive_list, QFocusEvent(QEvent.FocusIn, Qt.TabFocusReason))
         self.assertEqual((tab.folder, tab.go.isEnabled()), ("", False))
         tab.drive_list.setCurrentRow(0)                         # a real pick still works
+        tab.panel.settle()
         self.assertTrue(tab.folder)
 
     def test_refresh_forgets_the_picked_drive_folder(self):
         found, _ = self.mounted()
         tab = self.open(found)
         tab.drive_list.setCurrentRow(0)
+        tab.panel.settle()
         self.assertTrue(tab.go.isEnabled())
         tab.refresh.click()
         self.assertEqual((tab.folder, tab.go.isEnabled()), ("", False))
@@ -321,7 +379,7 @@ class InTheWindow(unittest.TestCase):
         with mock.patch.object(drivepanel.threading, "Thread", fake):
             win.pages[0].drive_list.setCurrentRow(0)            # SMART read
             panel.act("mount")                                  # drive action
-        self.assertEqual(len(held), 2)
+        self.assertEqual(len(held), 3)                         # SMART read, folder lookup, drive action
         gone = weakref.ref(panel)
         win.close()
         win.deleteLater()

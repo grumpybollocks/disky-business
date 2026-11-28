@@ -42,6 +42,7 @@ class SmartTab(TabBase):
         self.read_smart = smart.read                    # replaced in tests
         self.wrap = admin_wrap                          # the password prompt; replaced in tests
         self.by_password = {}                           # drive -> rows read with smartctl in this session
+        self.reading = None                             # the drive whose SMART record is being read
         self.asked_drive = self.usb_data = self.deep_data = None
         self.deep_view = None
         self.rows = []
@@ -128,7 +129,8 @@ class SmartTab(TabBase):
         self.update_buttons()
 
     def on_folder(self, _folder, _hint):
-        if self.mode is None:
+        d, asked = self.panel.current_drive(), self.asked_drive
+        if self.mode is None and (d is None or asked is None or d.path != asked.path):
             self.test_status.setText("")                # a self-test result belongs to the drive it ran on
         self.load()
 
@@ -141,24 +143,52 @@ class SmartTab(TabBase):
 
     def load(self):
         d = self.panel.current_drive()
+        if d is not None and d.smart:
+            if self.reading == d.path:
+                return                                  # already being read
+            self.reading = d.path
+            self.rows = []
+            self.answer.setText("Reading the drive...")
+            self.detail.setText("A drive that is asleep or struggling can take a while to answer.")
+            self.fill()
+            self.update_buttons()
+            read = self.read_smart                      # off the window's thread: a slow drive must not hold it up
+            self.panel.later(lambda: read(d), self.smart_read, d)
+            return
+        self.reading = None
+        self.show(d, *self.offline(d))
+
+    def smart_read(self, d, result):
+        if self.reading != d.path:
+            return
+        self.reading = None
+        now = self.panel.current_drive()
+        if now is None or now.path != d.path:
+            return                                      # another drive was picked meanwhile
+        self.show(d, *(result if isinstance(result, tuple) else ([], f"The drive did not answer: {result}")))
+
+    def offline(self, d):
+        """(rows, message) for a drive udisks gives no SMART for."""
         if d is None:
-            self.rows, msg = [], ""
+            return [], ""
+        if d.path in self.by_password:
+            rows = self.by_password[d.path]
+            # The health box said "no health data"; now there is some.
+            self.panel.health.setText("\n".join(["Read with the admin password:"]
+                                                + (smart.brief(rows) or ["No warnings."])))
+            return rows, ""
+        if d.flash:
+            return [], smart.NO_SMART_STICK + (
+                " If this is really a drive in a USB case, \"Read with admin password\" tries smartctl."
+                if d.device else "")
+        return [], smart.NO_SMART + (
+            " \"Read with admin password\" reads it with smartctl instead." if d.device else "")
+
+    def show(self, d, rows, msg):
+        self.rows = rows
+        if d is None:
             self.answer.setText("Choose a drive.")
         else:
-            if d.smart:
-                self.rows, msg = self.read_smart(d)
-            elif d.path in self.by_password:
-                self.rows, msg = self.by_password[d.path], ""
-                # The health box said "no health data"; now there is some.
-                self.panel.health.setText("\n".join(["Read with the admin password:"]
-                                                    + (smart.brief(self.rows) or ["No warnings."])))
-            elif d.flash:
-                self.rows, msg = [], smart.NO_SMART_STICK + (
-                    " If this is really a drive in a USB case, \"Read with admin password\" tries smartctl."
-                    if d.device else "")
-            else:
-                self.rows, msg = [], smart.NO_SMART + (
-                    " \"Read with admin password\" reads it with smartctl instead." if d.device else "")
             self.answer.setText(verdict(self.rows))
             if not msg:
                 main = sum(r.main for r in self.rows)
@@ -237,6 +267,7 @@ class SmartTab(TabBase):
                         "reads, and the drive stays usable, a little slower.\nDisky stays busy until it ends; "
                         "\"Stop self-test\" ends it early.\n\n" + self.password_words()):
             self.error = self.test_result = None
+            self.asked_drive = d                        # its result belongs to this drive
             self.test_status.setText(f"Starting the {kind} self-test...")
             self.test_progress.show_progress(f"Starting the {kind} self-test", None, "", "")
             self.set_busy("selftest")

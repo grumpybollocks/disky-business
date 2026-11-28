@@ -13,7 +13,7 @@ from disky import advice, tips
 
 from . import drives as drives_mod
 from .chrome import font as theme_font, stylesheet
-from .drivepanel import DrivePanel
+from .drivepanel import LOOKING, DrivePanel
 from .mapmodel import MapModel
 from .mapwidget import BlockMap
 from .runner import EngineRunner
@@ -160,12 +160,19 @@ class TestTab(TabBase):
     # -- actions -------------------------------------------------------------------------------------------
     def on_folder(self, _folder, hint):
         if self.mode is None and _folder:
-            self.plan.setText(self.plan_of(_folder))
+            self.plan.setText(LOOKING)                  # the drive may be slow: it answers off this thread
             self.stack.setCurrentWidget(self.plan)
+            plan_of = self.plan_of
+            self.plans = getattr(self, "plans", 0) + 1     # only the newest answer counts
+            self.panel.later(lambda: plan_of(_folder), self.plan_read, _folder, self.plans)
         elif self.mode is None and hint:
             self.stack.setCurrentWidget(self.status)
             self.status.setText(hint)
         self.update_buttons()
+
+    def plan_read(self, folder, number, result):
+        if self.mode is None and self.folder == folder and number == self.plans:
+            self.plan.setText(result if isinstance(result, str) else "Press \"Start test\" to test this drive.")
 
     def update_buttons(self):
         busy = self.mode is not None

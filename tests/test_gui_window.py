@@ -289,9 +289,11 @@ class Window(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             tab.set_folder(folder)
             self.assertIs(tab.stack.currentWidget(), tab.plan)          # shown as soon as a drive is picked
+            self.assertTrue(tab.panel.settle())
             self.assertIn("\"Start test\" fills the free space here", tab.plan.text())
             open(os.path.join(folder, "1.h2w"), "w").close()
             tab.set_folder(folder)
+            self.assertTrue(tab.panel.settle())
             self.assertIn("already holds 1 Disky test file from", tab.plan.text())
         self.assertEqual((tab.go.text(), tab.check.text(), tab.remove.text()),
                          ("Start test", "Check test files again", "Delete test files"))
