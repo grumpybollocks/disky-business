@@ -102,9 +102,11 @@ Pick a partition. It must be unmounted first (**Unmount**, on the left).
 - **Repair** lets the system's own tool fix it. This changes the drive. Copy off what matters first, if you
   still can; a repair can remove damaged files, and it cannot be stopped once started.
 - Windows (NTFS) partitions are not repaired here; use Windows' own disk check.
-- **Trim this drive** tells an SSD which space is free, for every mounted file system on it. Linux does this
-  weekly by itself, so it is rarely needed, and most USB cases do not pass it on. A file system mounted with
-  the `discard` option (btrfs `discard=async`, for example) trims as files are deleted; the tab says so.
+- **TRIM**: the tab first says whether it is needed, and why: does the drive accept TRIM, is Linux's weekly
+  TRIM on (and when it last ran and runs next), and is the drive mounted with continuous TRIM (the `discard`
+  option, btrfs `discard=async` for example). Linux's weekly TRIM reaches a USB drive only if it is plugged in
+  at that moment. Most USB cases do not pass TRIM on at all.
+- **Trim now** tells an SSD which space is free, for every mounted file system on it. Files are not touched.
 
 ## When a drive cannot be used
 

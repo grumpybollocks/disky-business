@@ -22,6 +22,8 @@ FAKE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "fake_engine.py"
 YES = {"mount": "/drive", "device": "/dev/fake1", "supported": True, "discard_max_bytes": 1 << 31,
        "discard_granularity": 4096, "rotational": False}
 NO = dict(YES, supported=False, discard_max_bytes=0, rotational=True)
+WEEKLY_ON = {"on": True, "last": "23 November 2026", "next": "30 November 2026"}
+WEEKLY_OFF = {"on": False, "last": "", "next": ""}
 
 
 @unittest.skipUnless(HAVE_QT, "PySide6 not installed")
@@ -30,19 +32,24 @@ class TrimTabTests(unittest.TestCase):
     def setUpClass(cls):
         cls.app = QApplication.instance() or QApplication([])
 
-    def open(self, scenario, facts):
-        self.win = MainWindow(theme=THEMES["w98"], drives=lambda: [],
+    def open(self, scenario, facts, weekly=None, found=()):
+        self.win = MainWindow(theme=THEMES["w98"], drives=lambda: list(found),
                               runners={"Maintenance": EngineRunner([sys.executable, FAKE, scenario])})
         self.addCleanup(self.win.close)
         self.win.show()
         tab = next(p for p in self.win.pages if p.title == "Maintenance")
         self.assertEqual(tab.title, "Maintenance")
         tab.info_of = lambda folder: facts
+        tab.weekly_of = lambda: weekly or WEEKLY_OFF
         self.assertEqual(tab.wrap(), admin_wrap())     # the real tab asks through the system prompt
         tab.wrap = lambda: ["env", "PRETEND_PROMPT=1"]   # tests never call the real prompt
         tab.confirm = lambda text: True
         self.win.tabs.setCurrentWidget(tab)
-        tab.set_folder("/drive/folder")
+        if found:
+            tab.panel.drive_list.setCurrentRow(0)
+        else:
+            tab.set_folder("/drive/folder")
+        self.assertTrue(tab.panel.settle())
         return tab
 
     def run_it(self, tab):
@@ -55,8 +62,8 @@ class TrimTabTests(unittest.TestCase):
 
     def test_supported_drive_is_trimmed_through_the_password_prompt(self):
         tab = self.open("good", YES)
-        self.assertEqual(tab.answer.text(), "This drive accepts TRIM.")
-        self.assertTrue(tab.go.isEnabled())
+        self.assertEqual(tab.answer.text(), "Worth doing: nothing trims this drive by itself.")
+        self.assertEqual((tab.go.isEnabled(), tab.go.text()), (True, "Trim now"))
         self.run_it(tab)
         self.assertEqual(tab.runner.last_argv[:2], ["env", "PRETEND_PROMPT=1"])     # the prompt goes first
         self.assertEqual(tab.runner.last_argv[-4:], ["trim", "/drive/folder", "--json", "--stdin-stop"])
@@ -64,7 +71,7 @@ class TrimTabTests(unittest.TestCase):
 
     def test_unsupported_drive_offers_nothing(self):
         tab = self.open("good", NO)
-        self.assertEqual(tab.answer.text(), "This drive does not accept TRIM.")
+        self.assertEqual(tab.answer.text(), "Not needed: spinning disks have no use for TRIM.")
         self.assertFalse(tab.go.isEnabled())
         tab.start()
         self.assertIsNone(tab.mode)
@@ -82,9 +89,44 @@ class TrimTabTests(unittest.TestCase):
         self.assertEqual(tab.status.text(), "This drive does not accept TRIM.")
 
 
+    def test_the_answer_says_whether_trim_is_needed_and_why(self):
+        from diskygui import drives as dr
+        tab = self.open("good", YES, WEEKLY_ON)
+        self.assertEqual(tab.answer.text(), "Not needed: Linux trims this drive once a week.")
+        self.assertEqual(tab.detail.text().split("\n"), [
+            "Accepts TRIM: yes.",
+            "Weekly TRIM by Linux: on. Last ran 23 November 2026, next 30 November 2026.",
+            "Continuous TRIM (the discard mount option): off.",
+            "Trim now covers: /drive/folder. It tells the drive which space is free right away; files are not "
+            "touched. It needs admin rights."])
+        tab = self.open("good", dict(YES, auto_discard=True), WEEKLY_OFF)
+        self.assertEqual(tab.answer.text(), "Not needed: the drive is told about freed space straight away.")
+        self.assertIn("Continuous TRIM (the discard mount option): on.", tab.detail.text())
+        self.assertIn("Weekly TRIM by Linux: off.", tab.detail.text())
+        tab = self.open("good", YES, {"on": None, "last": "", "next": ""})
+        self.assertIn("Weekly TRIM by Linux: could not be read.", tab.detail.text())
+        usb = dr.Drive("EXAMPLE USB SSD", 1 << 40, "SSD", True, dr.Health(),
+                       [dr.Volume("sdz1", 1 << 30, "ext4", ["/drive"])], path="/p/usb")
+        tab = self.open("good", YES, WEEKLY_ON, found=[usb])
+        self.assertEqual(tab.answer.text(), "Optional: Linux trims it once a week, but only if it is plugged in then.")
+        usb_ssd = dr.Drive("EXAMPLE USB SSD", 1 << 40, "SSD", True, dr.Health(),
+                           [dr.Volume("sdz1", 1 << 30, "vfat", ["/drive"])], path="/p/usb")
+        tab = self.open("good", NO, found=[usb_ssd])            # USB cases say "spinning" for any drive
+        self.assertEqual(tab.answer.text(), "This drive does not accept TRIM.")
+        self.assertIn("USB case", tab.detail.text())
+        hdd = dr.Drive("EXAMPLE HDD", 1 << 40, "HDD", False, dr.Health(), [dr.Volume("sdz1", 1 << 30, "ext4", [])],
+                       path="/p/hdd")
+        tab = self.open("good", NO, found=[hdd])                # not mounted, but it never needs TRIM anyway
+        self.assertEqual(tab.answer.text(), "Not needed: spinning disks have no use for TRIM.")
+        stick = dict(NO, rotational=False)
+        tab = self.open("good", stick)
+        self.assertEqual(tab.answer.text(), "This drive does not accept TRIM.")
+        self.assertIn("USB case", tab.detail.text())
+        self.assertFalse(tab.go.isEnabled())
+
     def test_a_picked_drive_without_a_folder_says_why(self):
         from diskygui import drives as dr
-        win = MainWindow(theme=THEMES["w98"], drives=lambda: [dr.Drive("EXAMPLE HDD", 1 << 40, "HDD", False,
+        win = MainWindow(theme=THEMES["w98"], drives=lambda: [dr.Drive("EXAMPLE SSD", 1 << 40, "SSD", False,
                                                                        dr.Health())])
         self.addCleanup(win.close)
         tab = next(p for p in win.pages if p.title == "Maintenance")
@@ -110,8 +152,8 @@ class TrimTabTests(unittest.TestCase):
         tab.panel.settle()
         self.assertEqual(tab.targets, ["/data", "/more"])               # every mounted file system, never NTFS
         self.assertNotIn("/win", asked_about)
-        self.assertEqual((tab.answer.text(), tab.go.isEnabled(), tab.go.text()),
-                         ("This drive accepts TRIM.", True, "Trim this drive"))
+        self.assertEqual((tab.go.isEnabled(), tab.go.text()), (True, "Trim now"))
+        self.assertIn("Trim now covers: /data, /more", tab.detail.text())
         questions = []
         tab.confirm = lambda text: questions.append(text) or True
         real_start = tab.runner.start

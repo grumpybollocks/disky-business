@@ -16,7 +16,7 @@ Linux only. Works, not yet released.
 | **Speed** | Sequential and small random reads and writes: four big results with bars, and a graph of the speed along the file |
 | **SMART** | The drive's own health record in plain words: worn-out spots, unreadable spots, cable errors, life left, temperature. Short and long self-tests. Drives in USB cases are read with `smartctl` after asking. **Deep scan**: maker, firmware, past errors, self-test history, lifetime statistics and a text report |
 | **Defrag** | How fragmented the files are. "Defragment all" works through every fragmented file on btrfs, ext4 and XFS with the system's own tool, and proves after each that its content is unchanged |
-| **Maintenance** | Checks a partition's file system and repairs it with the system's own tool, after showing the warnings that apply. "Trim this drive" for SSDs that accept it |
+| **Maintenance** | Checks a partition's file system and repairs it with the system's own tool, after showing the warnings that apply. For SSDs, says whether TRIM is needed (is Linux's weekly TRIM on, when did it last run) and offers "Trim now" |
 
 ![The SMART tab in plain words (example drive)](docs/screenshots/smart.png)
 

@@ -10,7 +10,7 @@ from .drives import NTFS, top_mounts
 from .tabbase import TabBase
 
 ABOUT = ("TRIM tells an SSD which space is free, so it can prepare it for new data and stay fast. It never "
-         "touches your files. Linux usually does it once a week by itself, so this is rarely needed.")
+         "touches your files.")
 
 
 def size_text(n):
@@ -27,6 +27,8 @@ class TrimTab(TabBase):
     def __init__(self, theme, runner=None, tip=None, drives=None, parent=None):
         super().__init__(theme, runner, tip, drives, parent)
         self.info_of = trim.info                    # replaced in tests
+        self.weekly_of = trim.weekly                # replaced in tests
+        self.weekly = None                          # Linux's weekly TRIM, read off the window's thread
         self.wrap = admin_wrap                      # the password prompt; replaced in tests
         self.facts = None
         self.result = None
@@ -45,7 +47,7 @@ class TrimTab(TabBase):
         self.status = QLabel("")
         self.status.setObjectName("status")
         self.status.setWordWrap(True)
-        self.go = QPushButton("Trim this drive")
+        self.go = QPushButton("Trim now")
         self.go.setToolTip("Tell the SSD which space is free. Files are not touched")
         self.go.clicked.connect(self.start)
         self.targets = []                               # the mounted file systems of the picked drive to trim
@@ -72,10 +74,13 @@ class TrimTab(TabBase):
             self.find_targets(folder)
             self.status.setText("")
             self.show_facts()
+            if self.facts and self.facts["supported"]:
+                weekly_of = self.weekly_of                  # systemd may be slow: asked off this thread
+                self.panel.later(weekly_of, self.weekly_read)
         self.update_buttons()
 
     def find_targets(self, folder):
-        """What "Trim this drive" would trim: every mounted file system of the picked drive that accepts TRIM.
+        """What "Trim now" would trim: every mounted file system of the picked drive that accepts TRIM.
         No folder is needed. Windows (NTFS) partitions are left alone. Without a picked drive, the folder
         chosen by hand counts."""
         d = self.panel.current_drive()
@@ -87,28 +92,61 @@ class TrimTab(TabBase):
         self.facts = next((f for f in facts if f and f["supported"]), facts[0] if facts else None)
         self.unmounted = bool(d and not places)
 
+    def weekly_read(self, result):
+        self.weekly = result if isinstance(result, dict) else {"on": None, "last": "", "next": ""}
+        if self.mode is None:
+            self.show_facts()
+
+    def weekly_line(self):
+        w = self.weekly
+        if w is None:
+            return "Weekly TRIM by Linux: checking..."
+        if w["on"] is None:
+            return "Weekly TRIM by Linux: could not be read."
+        if not w["on"]:
+            return "Weekly TRIM by Linux: off."
+        when = ([f"Last ran {w['last']}"] if w["last"] else []) + (
+            [("next " if w["last"] else "Next ") + w["next"]] if w["next"] else [])
+        return "Weekly TRIM by Linux: on." + (f" {', '.join(when)}." if when else "")
+
     def show_facts(self):
-        f = self.facts
-        if getattr(self, "unmounted", False):
+        f, d = self.facts, self.panel.current_drive()
+        # The drive service knows the kind; the kernel's "rotational" is wrong behind most USB cases.
+        spinning = d.kind == "HDD" if d is not None else bool(f and f.get("rotational"))
+        if spinning:
+            self.answer.setText("Not needed: spinning disks have no use for TRIM.")
+            self.detail.setText("Accepts TRIM: no. Only SSDs use it.")
+        elif getattr(self, "unmounted", False):
             self.answer.setText("Mount this drive first.")
-            self.detail.setText("TRIM works through a mounted file system. Press Mount, on the left, then look "
-                                "here again.")
+            self.detail.setText("TRIM goes through a mounted file system. Press Mount, under the drive list, then "
+                                "look here again.")
         elif not f:
             self.answer.setText("Choose a drive.")
             self.detail.setText("")
-        elif f["supported"]:
-            self.answer.setText("This drive accepts TRIM.")
-            where = ", ".join(self.targets)
-            text = (f"\"Trim this drive\" tells it which space is free ({where}). Files are not touched. It "
-                    "needs admin rights.")
-            if f.get("auto_discard"):
-                text += (" It is mounted with continuous TRIM (the discard option), so the drive already hears "
-                         "about freed space as files are deleted; this is rarely needed.")
-            self.detail.setText(text)
-        else:
+        elif not f["supported"]:
             self.answer.setText("This drive does not accept TRIM.")
-            self.detail.setText("Spinning disks have no use for it. Many USB cases do not pass it on to the SSD "
-                                "inside, so it cannot be done through them. Nothing is offered.")
+            self.detail.setText("Accepts TRIM: no. If this is an SSD in a USB case, the case does not pass TRIM "
+                                "on; connected inside the computer it would. Most USB sticks and memory cards "
+                                "do not take it either.")
+        else:
+            w = self.weekly or {}
+            if f.get("auto_discard"):
+                answer = "Not needed: the drive is told about freed space straight away."
+            elif w.get("on") and d is not None and d.usb:
+                answer = "Optional: Linux trims it once a week, but only if it is plugged in then."
+            elif w.get("on"):
+                answer = "Not needed: Linux trims this drive once a week."
+            elif w.get("on") is False:
+                answer = "Worth doing: nothing trims this drive by itself."
+            else:
+                answer = "This drive accepts TRIM."
+            self.answer.setText(answer)
+            self.detail.setText("\n".join([
+                "Accepts TRIM: yes.",
+                self.weekly_line(),
+                "Continuous TRIM (the discard mount option): " + ("on." if f.get("auto_discard") else "off."),
+                f"Trim now covers: {', '.join(self.targets)}. It tells the drive which space is free right away; "
+                "files are not touched. It needs admin rights."]))
 
     def update_buttons(self):
         self.go.setEnabled(self.mode is None and bool(self.targets))

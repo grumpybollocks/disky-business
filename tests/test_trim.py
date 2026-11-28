@@ -42,6 +42,21 @@ class Info(unittest.TestCase):
         make_sys(d, "nvme0n1", "nvme0n1p6", 2199023255040, 0)
         self.sys = make_sys(d, "sde", "sde1", 0, 1)
 
+    def test_linux_weekly_trim_is_read_from_systemd(self):
+        from types import SimpleNamespace
+        def answer(text):
+            return lambda cmd, **k: SimpleNamespace(returncode=0, stdout=text)
+        on = ("ActiveState=active\nUnitFileState=enabled\nLastTriggerUSec=Mon 2026-11-23 00:45:25 EET\n"
+              "NextElapseUSecRealtime=Mon 2026-11-30 01:31:18 EET\n")
+        self.assertEqual(trim.weekly(answer(on)), {"on": True, "last": "23 November 2026", "next": "30 November 2026"})
+        off = "ActiveState=inactive\nUnitFileState=disabled\nLastTriggerUSec=n/a\nNextElapseUSecRealtime=\n"
+        self.assertEqual(trim.weekly(answer(off)), {"on": False, "last": "", "next": ""})
+        never = "ActiveState=active\nUnitFileState=enabled\nLastTriggerUSec=\nNextElapseUSecRealtime=Mon 2026-11-30 01:31:18 EET\n"
+        self.assertEqual(trim.weekly(answer(never)), {"on": True, "last": "", "next": "30 November 2026"})
+        def missing(cmd, **k):
+            raise FileNotFoundError("systemctl")
+        self.assertEqual(trim.weekly(missing), {"on": None, "last": "", "next": ""})     # not a systemd system
+
     def test_supported_and_not(self):
         a = trim.info("/home/x", self.mi, self.sys)
         self.assertEqual((a["mount"], a["device"], a["supported"], a["discard_max_bytes"], a["rotational"]),

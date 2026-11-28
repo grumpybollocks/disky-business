@@ -7,6 +7,7 @@ so the window starts this command through the system's password prompt.
 """
 import os
 import re
+import subprocess
 
 from . import mounts, proc
 
@@ -63,6 +64,32 @@ def info(path, mountinfo="/proc/self/mountinfo", sys_root=_SYS):
     out["rotational"] = None if rot is None else rot == "1"
     out["supported"] = out["discard_max_bytes"] > 0
     return out
+
+
+_MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August", "September", "October",
+           "November", "December")
+_DAY = re.compile(r"\b(\d{4})-(\d{2})-(\d{2})\b")
+
+
+def _day(stamp):
+    """'Mon 2026-11-23 00:45:25 EET' -> '23 November 2026'; '' when there is none."""
+    m = _DAY.search(stamp or "")
+    return f"{int(m[3])} {_MONTHS[int(m[2]) - 1]} {m[1]}" if m and 1 <= int(m[2]) <= 12 else ""
+
+
+def weekly(run=subprocess.run):
+    """Linux's own weekly TRIM (systemd's fstrim.timer). It trims every mounted file system that accepts TRIM.
+    {"on": True/False, or None when it cannot be read, "last": day it last ran or "", "next": next day or ""}."""
+    try:
+        out = run(["systemctl", "show", "fstrim.timer", "-p", "ActiveState", "-p", "LastTriggerUSec",
+                   "-p", "NextElapseUSecRealtime"], capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return {"on": None, "last": "", "next": ""}
+    facts = dict(line.split("=", 1) for line in (out.stdout or "").splitlines() if "=" in line)
+    if out.returncode != 0 or "ActiveState" not in facts:
+        return {"on": None, "last": "", "next": ""}
+    return {"on": facts["ActiveState"] == "active", "last": _day(facts.get("LastTriggerUSec")),
+            "next": _day(facts.get("NextElapseUSecRealtime"))}
 
 
 _TRIMMED = re.compile(r"\((\d+) bytes\) trimmed")
