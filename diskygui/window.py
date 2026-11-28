@@ -6,7 +6,6 @@ Each tab is its own widget added in MainWindow.TABS; a tab appears only when its
 import os
 
 from PySide6.QtCore import QSettings, Qt, QTimer, Signal
-from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow,
                                QMessageBox, QPushButton, QStackedWidget, QTabWidget, QVBoxLayout, QWidget)
 
@@ -400,12 +399,6 @@ class MainWindow(QMainWindow):
             self.tabs.addTab(page, cls.title)
         self.tabs.setCornerWidget(self.theme_button, Qt.TopRightCorner)
         self._tab = 0
-        # Keys: F5 reads the drive list again, Esc stops the job in hand, Ctrl+Q closes (asking first if busy).
-        self.keys = []
-        for key, slot in (("F5", self.key_refresh), ("Esc", self.key_stop), ("Ctrl+Q", self.close)):
-            shortcut = QShortcut(QKeySequence(key), self)
-            shortcut.activated.connect(slot)
-            self.keys.append(shortcut)
         self.tabs.currentChanged.connect(self.on_tab)
         self._label_theme_button()
         body = QWidget()
@@ -451,6 +444,19 @@ class MainWindow(QMainWindow):
             self._held = False
             self.next_tip()
         self._tab = index
+
+    def keyPressEvent(self, event):
+        """F5 reads the drive list again, Esc stops the job in hand (never a repair), Ctrl+Q closes (asking
+        first if a job runs). Handled here, with no extra objects to keep alive."""
+        key, ctrl = event.key(), bool(event.modifiers() & Qt.ControlModifier)
+        if key == Qt.Key_F5:
+            self.key_refresh()
+        elif key == Qt.Key_Escape:
+            self.key_stop()
+        elif key == Qt.Key_Q and ctrl:
+            self.close()
+        else:
+            super().keyPressEvent(event)
 
     def key_refresh(self):
         panel = self.pages[self.tabs.currentIndex()].panel

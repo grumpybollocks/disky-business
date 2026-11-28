@@ -408,13 +408,16 @@ class Hunt(unittest.TestCase):
         self.assertFalse(win.pages[0].panel.folder_box.isHidden())
 
     def test_q4_keys_refresh_stop_and_quit(self):
+        from PySide6.QtCore import QEvent, Qt
+        from PySide6.QtGui import QKeyEvent
+
+        def press(win, key, modifiers=Qt.NoModifier):
+            win.keyPressEvent(QKeyEvent(QEvent.KeyPress, key, modifiers))
         calls = []
         win = self.open(lambda: calls.append(1) or [])
         win.show()
-        keys = {k.key().toString(): k for k in win.keys}
-        self.assertEqual(sorted(keys), ["Ctrl+Q", "Esc", "F5"])
         before = len(calls)
-        keys["F5"].activated.emit()
+        press(win, Qt.Key_F5)
         win.pages[0].panel.settle()
         self.assertEqual(len(calls), before + 1)                # the drive list was read again
         tab = win.pages[0]
@@ -422,16 +425,17 @@ class Hunt(unittest.TestCase):
         tab.runner.running = lambda: True
         tab.runner.stop = lambda: stopped.append("stop")
         tab.mode = "test"
-        keys["Esc"].activated.emit()
+        press(win, Qt.Key_Escape)
         self.assertEqual(stopped, ["stop"])
         tab.mode, tab.NO_STOP = "repair", ("repair",)
-        keys["Esc"].activated.emit()
+        press(win, Qt.Key_Escape)
         self.assertEqual(stopped, ["stop"])                     # a repair is never cut short
         tab.mode = None
         del tab.runner.running
-        asked = []
-        win.confirm_close = lambda text: asked.append(text) or True
-        keys["Ctrl+Q"].activated.emit()
+        press(win, Qt.Key_Q)                                    # a plain Q is not a command
+        self.assertTrue(win.isVisible())
+        win.confirm_close = lambda text: True
+        press(win, Qt.Key_Q, Qt.ControlModifier)
         self.assertFalse(win.isVisible())
 
     def test_q6_q8_the_speed_test_shows_how_far_it_is(self):
