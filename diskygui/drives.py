@@ -116,6 +116,9 @@ class Drive:
         writable = writable or (lambda p: os.access(p, os.W_OK))
         mounted_ro = mounted_ro or _mounted_ro
         mounted = [v for v in self.volumes if v.mounts]
+        if not mounted and not any(v.fstype for v in self.volumes):
+            return None, ("It has no file system (it is blank or unformatted), so there is nowhere to put test "
+                          "files. Format it first, for example with the system's disk tool.")
         if not mounted:
             return None, "Not mounted. Press Mount, under the drive list, to use it."
         hands_off = [v for v in mounted if v.fstype in NTFS and not v.is_system]

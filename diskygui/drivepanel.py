@@ -87,6 +87,7 @@ def fresh(read_drives, drive):
 
 
 LOOKING = "Looking at the drive..."
+READING = "Reading the drive list..."
 
 
 class DrivePanel(QWidget):
@@ -109,7 +110,7 @@ class DrivePanel(QWidget):
         # and a drive must never be picked for the user.
         self.drive_list.itemSelectionChanged.connect(self.on_drive)
         self.refresh = QPushButton("Refresh")
-        self.refresh.clicked.connect(self.load_drives)
+        self.refresh.clicked.connect(self.refresh_clicked)
         self.actions = driveactions                     # replaced in tests
         self.read_smart = smart.read                    # replaced in tests
         self.busy = False
@@ -117,6 +118,8 @@ class DrivePanel(QWidget):
         self.jobs = []                                  # slow work under way; the window stays usable meanwhile
         self.looking = None                             # the drive whose folder is being looked for
         self.looks = 0
+        self.lists = 0                                  # only the newest drive list counts
+        self.uses_folder = uses_folder
         self.collector = QTimer(self)
         self.collector.setInterval(40)
         self.collector.timeout.connect(self.collect)
@@ -172,17 +175,37 @@ class DrivePanel(QWidget):
         self.setFixedWidth(250)
         self.load_drives()
 
-    def load_drives(self):
+    def refresh_clicked(self):
+        self.load_drives()                              # not connected directly: clicked() passes a bool
+
+    def load_drives(self, then=None):
+        """Read the drive list off the window's thread (the drive service can stall behind a failing drive),
+        then call `then()` if given."""
         picked = self.row() >= 0
         self.drive_list.blockSignals(True)
-        self.drives = self.read_drives()
+        self.drives = []
+        self.drive_list.clear()
+        self.drive_list.blockSignals(False)
+        self.health.setText(READING)
+        if picked:                      # the list is read again: the drive picked before is no longer picked,
+            self.set_folder("", "")     # and every tab is told, also when it had no folder (an unmounted drive)
+        self.update_actions()
+        self.lists += 1
+        self.later(self.read_drives, self.drives_read, self.lists, then)
+
+    def drives_read(self, number, then, result):
+        if number != self.lists:
+            return                                      # Refresh was pressed again meanwhile
+        self.drives = result if isinstance(result, list) else []
+        self.drive_list.blockSignals(True)
         self.drive_list.clear()
         self.drive_list.addItems([d.label for d in self.drives])
         self.drive_list.blockSignals(False)
-        self.health.setText("" if self.drives else "Drive list not available. Choose a folder below.")
-        if picked:                      # the list was read again: the drive picked before is no longer picked,
-            self.set_folder("", "")     # and every tab is told, also when it had no folder (an unmounted drive)
+        self.health.setText("" if self.drives else "Drive list not available." + (
+            " Choose a folder below." if self.uses_folder else ""))
         self.update_actions()
+        if then is not None:
+            then()
 
     def update_actions(self):
         """Mount, Unmount and Safely remove are offered only where they can do something."""
@@ -209,6 +232,8 @@ class DrivePanel(QWidget):
         if d is None or self.busy or self.acting:
             return
         self.acting = True                              # a second click while this one works does nothing
+        self.lock()                                     # and nothing else starts on a drive being changed
+        self.set_folder("", "")
         self.action_note.setText({"mount": "Mounting...", "unmount": "Unmounting...",
                                   "remove": "Switching off..."}[job])
         self.update_actions()
@@ -220,14 +245,18 @@ class DrivePanel(QWidget):
         self.later(work, self.acted, d)
 
     def acted(self, d, result):
-        self.acting = False
         message = result[1] if isinstance(result, tuple) else f"It did not work: {result}"
-        self.load_drives()
-        same = next((i for i, x in enumerate(self.drives) if x.path and x.path == d.path), -1)
-        if same >= 0:
-            self.drive_list.setCurrentRow(same)         # picked by the user before; shows its new state
-        self.update_actions()
         self.action_note.setText(message)
+
+        def again():
+            self.acting = False
+            self.lock()
+            same = next((i for i, x in enumerate(self.drives) if x.path and x.path == d.path), -1)
+            if same >= 0:
+                self.drive_list.setCurrentRow(same)     # picked by the user before; shows its new state
+            self.update_actions()
+            self.action_note.setText(message)
+        self.load_drives(again)
 
     # -- slow work off the window's thread ---------------------------------------------------------------------
     def later(self, work, then, *first):
@@ -277,6 +306,9 @@ class DrivePanel(QWidget):
         self.update_actions()
         if d is None:
             self.looking = None
+            self.health.setText("")
+            if self.folder:
+                self.set_folder("", "")                 # nothing picked: nothing to start
             return
         self.health.setText("\n".join(self.health_lines(d)))
         if d.smart:                                     # wear and warnings follow when the drive has answered
@@ -318,8 +350,18 @@ class DrivePanel(QWidget):
 
     def choose_folder(self):
         path = QFileDialog.getExistingDirectory(self, "Folder on the drive", self.folder or "/")
-        if path:
-            self.set_folder(path)
+        if not path:
+            return
+        d = self.current_drive()
+        if d is not None and not any(path == m or path.startswith(m.rstrip("/") + "/")
+                                     for v in d.volumes for m in v.mounts):
+            self.drive_list.blockSignals(True)          # the folder is elsewhere: the listed drive is not it
+            self.drive_list.clearSelection()
+            self.drive_list.blockSignals(False)
+            self.health.setText("")
+            self.show_note()
+            self.update_actions()
+        self.set_folder(path)
 
     def set_folder(self, path, hint=""):
         self.looking = None                             # a folder chosen by hand wins over a late answer
@@ -329,13 +371,17 @@ class DrivePanel(QWidget):
 
     def set_busy(self, busy):
         self.busy = busy
-        for w in (self.choose, self.drive_list, self.refresh):
-            w.setEnabled(not busy)
+        self.lock()
         self.update_actions()
+
+    def lock(self):
+        for w in (self.choose, self.drive_list, self.refresh):
+            w.setEnabled(not (self.busy or self.acting))
 
     def adopt(self, other):
         """Take over what another tab's panel shows, so the user picks a drive once."""
-        if other is self or (other.folder == self.folder and other.row() == self.row()):
+        if other is self or (other.drives is self.drives and other.folder == self.folder
+                             and other.row() == self.row()):
             return
         self.drives = other.drives
         self.drive_list.blockSignals(True)

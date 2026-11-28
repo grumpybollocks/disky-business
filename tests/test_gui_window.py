@@ -218,7 +218,10 @@ class Window(unittest.TestCase):
         proc = tab.runner._proc
         self.assertIsNotNone(proc)
         pid = proc.processId()
+        asked = []
+        self.win.confirm_close = lambda text: asked.append(text) or True      # the user says: yes, close
         self.win.close()
+        self.assertEqual(len(asked), 1)                                       # and was asked first
         end = time.monotonic() + 5
         while os.path.exists(f"/proc/{pid}") and open(f"/proc/{pid}/stat").read().split()[2] != "Z":
             self.assertLess(time.monotonic(), end, "the engine was left running")

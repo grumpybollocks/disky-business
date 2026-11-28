@@ -9,7 +9,8 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QListWidget, QPushBut
 from disky import fscare
 
 from . import driveactions
-from .drives import NTFS, fs_name, size_text
+from .drivepanel import fresh
+from .drives import NTFS, Drive, fs_name, size_text
 from .trimtab import TrimTab
 
 ABOUT = ("Check reads a partition's file system and says whether it is sound. Repair lets the system's own tool "
@@ -59,6 +60,7 @@ class MaintenanceTab(TrimTab):
         self.checked = {}                               # (drive, partition) -> what its last check here found
         self.shown_drive = None
         self.maint_result = None
+        self.verifying = False                      # the drive is being read again before a job
         about = QLabel(ABOUT)
         about.setWordWrap(True)
         head = QLabel("Partitions")
@@ -135,38 +137,52 @@ class MaintenanceTab(TrimTab):
         super().update_buttons()
         if hasattr(self, "check_button"):
             v = self.picked()
-            ready = self.mode is None and v is not None and advice(v)[0]
+            ready = self.mode is None and not self.verifying and v is not None and advice(v)[0]
             self.check_button.setEnabled(ready)
             self.repair_button.setEnabled(ready)
 
     # -- check and repair ------------------------------------------------------------------------------------
-    def still_there(self):
-        """(drive, partition) as they are now, or None after saying why not. Read again from the system each
-        time: a name like sdb1 can belong to another drive once drives were unplugged and plugged in."""
+    def still_there(self, go):
+        """Read the drive again from the system, off the window's thread, then `go(drive, partition)` as they are
+        now, or say why not. A name like sdb1 can belong to another drive once drives were unplugged and plugged
+        in, so nothing is done on the strength of the old list."""
         v, d = self.picked(), self.panel.current_drive()
-        if v is None or d is None or not advice(v)[0] or self.mode is not None:
-            return None
-        now = self.panel.fresh(d)
+        if v is None or d is None or not advice(v)[0] or self.mode is not None or self.verifying:
+            return
+        self.verifying = True                           # no second click while the system answers
+        self.update_buttons()
+        read = self.panel.read_drives
+        self.panel.later(lambda: fresh(read, d), self.verified, d, v, go)
+
+    def verified(self, d, v, go, now):
+        self.verifying = False
+        if self.mode is not None or self.picked() is not v or self.panel.current_drive() is not d:
+            self.update_buttons()
+            return                                      # the user picked something else meanwhile
+        now = now if isinstance(now, Drive) else None
         same = next((x for x in now.volumes if x.device == v.device), None) if now else None
         if same is None or (same.fstype, same.size) != (v.fstype, v.size) or not advice(same)[0]:
             self.panel.load_drives()                    # shows the drives as they are; nothing stays picked
             self.maint_status.setText("The drives changed since the list was read. Pick the drive again.")
-            return None
-        return now, same
+            self.update_buttons()
+            return
+        go(now, same)
 
     def check(self):
-        found = self.still_there()
-        if found:
-            self._maint("check", "fscheck", "Checking... this only reads.", *found)
+        self.still_there(self.start_check)
+
+    def start_check(self, d, v):
+        self._maint("check", "fscheck", "Checking... this only reads.", d, v)
 
     def repair(self):
-        found = self.still_there()
-        if not found:
-            return
-        d, v = found
+        self.still_there(self.ask_repair)
+
+    def ask_repair(self, d, v):
         if self.confirm(repair_question(v, self.checked.get((d.path, v.device)), d.health.state == "failing",
                                         d.model)):
             self._maint("repair", "fsrepair", "Repairing... do not unplug the drive.", d, v, "--yes")
+        else:
+            self.update_buttons()
 
     def _maint(self, mode, command, words, d, v, *options):
         self.error = self.maint_result = None

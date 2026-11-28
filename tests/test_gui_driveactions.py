@@ -147,7 +147,9 @@ class Panel(unittest.TestCase):
         self.assertEqual((gone, panel.action_note.text()), ([], "That drive is no longer there."))
         panel.read_drives = found
         panel.load_drives()
+        self.assertTrue(panel.settle())                         # the list is read off the window's thread
         panel.drive_list.setCurrentRow(0)
+        self.assertTrue(panel.settle())
         panel.set_busy(True)
         self.assertEqual(buttons(), (False, False, False))      # never during a job
         panel.set_busy(False)

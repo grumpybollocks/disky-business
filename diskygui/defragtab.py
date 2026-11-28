@@ -109,6 +109,7 @@ class DefragTab(TabBase):
     def on_folder(self, folder, hint):
         if self.mode is None:
             self.worst = []
+            self.fragmented = 0                         # Defragment all waits for this drive's own scan
             self.files.clear()
             self.model.reset()
             self.model.version += 1

@@ -71,6 +71,7 @@ class Tab(unittest.TestCase):
         return tab
 
     def wait(self, tab):
+        tab.panel.settle()              # the drive is read again first, off the window's thread; then the job starts
         end = time.monotonic() + 5
         while tab.mode is not None:
             self.assertLess(time.monotonic(), end, "timed out")
@@ -79,6 +80,21 @@ class Tab(unittest.TestCase):
 
     def buttons(self, tab):
         return tab.check_button.isEnabled(), tab.repair_button.isEnabled()
+
+    def test_the_drive_is_read_again_off_the_window_thread_before_a_check(self):
+        tab = self.open("good", [usb(Volume("sdz1", 1 << 30, "vfat", []))])
+        tab.panel.settle()
+        tab.panel.drive_list.setCurrentRow(0)
+        tab.panel.settle()
+        listed = tab.panel.read_drives
+        tab.panel.read_drives = lambda: (time.sleep(0.6), listed())[1]
+        start = time.monotonic()
+        tab.check_button.click()
+        self.assertLess(time.monotonic() - start, 0.3)          # a stalled drive service cannot freeze the window
+        self.assertEqual(self.buttons(tab), (False, False))     # and no second click meanwhile
+        self.assertTrue(tab.panel.settle())
+        self.wait(tab)
+        self.assertEqual(tab.runner.last_argv[-4:], ["fscheck", "sdz1", "--json", "--stdin-stop"])
 
     def test_check_then_repair_with_the_question_first(self):
         tab = self.open("bad", [usb(Volume("sdz1", 1 << 30, "vfat", []))])
@@ -90,6 +106,7 @@ class Tab(unittest.TestCase):
         self.assertEqual((tab.picked().device, self.buttons(tab), tab.info.text()),
                          ("sdz1", (True, True), maintenancetab.READY))            # one partition: nothing to choose
         tab.check_button.click()
+        tab.panel.settle()
         self.assertEqual(self.buttons(tab), (False, False))                 # one job at a time
         self.assertFalse(self.win.tabs.tabBar().isEnabled())
         self.wait(tab)
@@ -98,11 +115,13 @@ class Tab(unittest.TestCase):
         asked = []
         tab.confirm = lambda text: asked.append(text) or False
         tab.repair_button.click()
+        tab.panel.settle()
         self.assertEqual((len(asked), tab.mode), (1, None))                 # said no: nothing runs
         self.assertIn("The last check found problems.", asked[0])
         self.assertEqual(tab.runner.last_argv[-4], "fscheck")
         tab.confirm = lambda text: True
         tab.repair_button.click()
+        tab.panel.settle()
         self.wait(tab)
         self.assertEqual(tab.runner.last_argv[-5:], ["fsrepair", "sdz1", "--json", "--stdin-stop", "--yes"])
         self.assertIn("on EXAMPLE USB?", asked[0])
@@ -122,7 +141,9 @@ class Tab(unittest.TestCase):
         tab.parts.setCurrentRow(0)
         tab.confirm = lambda text: True
         tab.check()
+        tab.panel.settle()
         tab.repair()
+        tab.panel.settle()
         self.assertEqual(started, [])                                       # also not when called directly
 
     def test_nothing_is_done_on_the_strength_of_an_old_list(self):
@@ -133,8 +154,10 @@ class Tab(unittest.TestCase):
         tab = self.open("good", None)
         tab.panel.read_drives = lambda: list(now)
         tab.panel.load_drives()
+        tab.panel.settle()
         tab.panel.drive_list.setCurrentRow(0)
         tab.check_button.click()
+        tab.panel.settle()
         self.wait(tab)
         self.assertEqual(tab.maint_status.text(), "No problems found.")
         started = []
@@ -142,12 +165,15 @@ class Tab(unittest.TestCase):
         tab.confirm = lambda text: True
         # Refresh with nothing changed: the pick is gone, so are the partitions and the buttons.
         tab.panel.refresh.click()
+        tab.panel.settle()
         self.assertEqual((tab.parts.count(), self.buttons(tab), tab.maint_status.text()), (0, (False, False), ""))
         # The drive is swapped for another that got the same name sdz, and the list is not read again.
         tab.panel.drive_list.setCurrentRow(0)
         now[:] = [second]
         tab.repair_button.click()
+        tab.panel.settle()
         tab.check_button.click()
+        tab.panel.settle()
         self.assertEqual(started, [])
         self.assertIn("The drives changed", tab.maint_status.text())
         # Picking the new drive: nothing of the first one is remembered.
@@ -156,6 +182,7 @@ class Tab(unittest.TestCase):
         asked = []
         tab.confirm = lambda text: asked.append(text) or False
         tab.repair_button.click()
+        tab.panel.settle()
         self.assertIn("has not been checked yet", asked[0])
         self.assertIn("on ANOTHER DRIVE?", asked[0])
 
@@ -163,11 +190,13 @@ class Tab(unittest.TestCase):
         tab = self.open("refuse", [usb(Volume("sdz1", 1, "vfat", []), health=Health("failing", "Health: FAILING"))])
         tab.panel.drive_list.setCurrentRow(0)
         tab.check_button.click()
+        tab.panel.settle()
         self.wait(tab)
         self.assertEqual(tab.maint_status.text(), "It is mounted. Unmount it first.")
         asked = []
         tab.confirm = lambda text: asked.append(text) or False
         tab.repair_button.click()
+        tab.panel.settle()
         self.assertIn("FAILING", asked[0])
         self.assertIn("has not been checked yet", asked[0])                 # a refused check is no check
 

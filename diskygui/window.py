@@ -81,6 +81,7 @@ class TestTab(TabBase):
     def __init__(self, theme, runner=None, tip=None, drives=None, parent=None):
         super().__init__(theme, runner, tip, drives, parent)
         self.model = MapModel()
+        self.map_of = ""                                # the folder the map was drawn for
         self.summary = None
         self.verdict_state = None
         self.drive_list, self.health, self.refresh = self.panel.drive_list, self.panel.health, self.panel.refresh
@@ -159,6 +160,10 @@ class TestTab(TabBase):
 
     # -- actions -------------------------------------------------------------------------------------------
     def on_folder(self, _folder, hint):
+        if self.mode is None and hint != LOOKING and _folder != self.map_of:
+            self.map_of = _folder                       # the map belongs to the drive it was drawn for
+            self.model.reset()
+            self.model.version += 1
         if self.mode is None and _folder:
             self.plan.setText(LOOKING)                  # the drive may be slow: it answers off this thread
             self.stack.setCurrentWidget(self.plan)
@@ -315,6 +320,10 @@ def system_is_dark():
 TIP_SECONDS = 30            # how long one tip stays; long enough to read it and get the joke
 
 
+CLOSE_REPAIR = ("A repair is running. Stopping it half way can leave the file system worse than before. Wait "
+                "until it has finished. Close anyway?")
+
+
 class MainWindow(QMainWindow):
     TABS = (TestTab, SpeedTab, SmartTab, DefragTab, MaintenanceTab)
 
@@ -374,6 +383,7 @@ class MainWindow(QMainWindow):
         dress(self, self.theme)
         self._tip_no = int.from_bytes(os.urandom(2), "big") % len(tips.TIPS)
         self._held = False
+        self.confirm_close = self.ask_close             # replaced in tests
         self._timer = QTimer(self)
         self._timer.timeout.connect(self.next_tip)
         self._timer.start(TIP_SECONDS * 1000)
@@ -389,7 +399,7 @@ class MainWindow(QMainWindow):
     def on_tab(self, index):
         """The drive picked on one tab is the drive on the next. While a tab works, no other can be opened,
         also not with the keyboard (Ctrl+Tab), so two jobs never run at once."""
-        busy = next((i for i, p in enumerate(self.pages) if p.mode is not None), None)
+        busy = next((i for i, p in enumerate(self.pages) if p.mode is not None or p.panel.acting), None)
         if busy is not None and index != busy:
             self.tabs.blockSignals(True)
             self.tabs.setCurrentIndex(busy)
@@ -444,7 +454,18 @@ class MainWindow(QMainWindow):
             self._held = True
             self.tip_line.setText(text)
 
+    def ask_close(self, text):
+        return QMessageBox.question(self, "Close Disky Business?", text, QMessageBox.Yes | QMessageBox.No,
+                                    QMessageBox.No) == QMessageBox.Yes
+
     def closeEvent(self, event):
+        busy = next((p for p in self.pages if p.mode is not None), None)
+        if busy is not None:
+            text = (CLOSE_REPAIR if busy.mode == "repair" else
+                    f"The {busy.title} tab is still working ({busy.mode}). Closing the window stops it. Close anyway?")
+            if not self.confirm_close(text):
+                event.ignore()
+                return
         if self.remember and not self.isMaximized():
             QSettings("disky-business", "disky-business").setValue("size", self.size())
         for page in self.pages:

@@ -90,7 +90,8 @@ class TrimTab(TabBase):
         facts = [self.info_of(place) for place in places]
         self.targets = [place for place, f in zip(places, facts) if f and f["supported"]]
         self.facts = next((f for f in facts if f and f["supported"]), facts[0] if facts else None)
-        self.unmounted = bool(d and not places)
+        self.windows_only = bool(d and not places and any(v.mounts and v.fstype in NTFS for v in d.volumes))
+        self.unmounted = bool(d and not places and not self.windows_only)
 
     def weekly_read(self, result):
         self.weekly = result if isinstance(result, dict) else {"on": None, "last": "", "next": ""}
@@ -116,6 +117,9 @@ class TrimTab(TabBase):
         if spinning:
             self.answer.setText("Not needed: spinning disks have no use for TRIM.")
             self.detail.setText("Accepts TRIM: no. Only SSDs use it.")
+        elif getattr(self, "windows_only", False):
+            self.answer.setText("Windows (NTFS) drive: left alone.")
+            self.detail.setText("Disky does not trim Windows drives. Windows trims its own drives when it runs.")
         elif getattr(self, "unmounted", False):
             self.answer.setText("Mount this drive first.")
             self.detail.setText("TRIM goes through a mounted file system. Press Mount, under the drive list, then "

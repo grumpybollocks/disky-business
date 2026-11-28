@@ -234,8 +234,12 @@ class SpeedTab(TabBase):
         self.graph.update()
 
     def on_folder(self, _folder, hint):
-        if self.mode is None and hint:
-            self.status.setText(hint)
+        if self.mode is None:
+            self.results = {}                           # results belong to the drive they were measured on
+            self.graph.clear()
+            self.bars.clear()
+            if hint:
+                self.status.setText(hint)
         self.update_buttons()
 
     def update_buttons(self):
@@ -245,6 +249,7 @@ class SpeedTab(TabBase):
 
     def start_or_stop(self):
         if self.mode:
+            self.stopping = True
             self.status.setText("Stopping...")
             self.runner.stop()
         elif self.folder:
@@ -252,6 +257,7 @@ class SpeedTab(TabBase):
 
     def begin(self, *extra):
         self.error, self.results = None, {}
+        self.stopping = False
         self.graph.clear()
         self.bars.clear()
         self.status.setText("Starting...")
@@ -263,7 +269,8 @@ class SpeedTab(TabBase):
         if kind == "speed_phase":
             if ev.get("total_bytes"):
                 self.graph.total = ev["total_bytes"]
-            self.status.setText("Measuring: " + WORDS.get(ev.get("test"), "working").lower() + "...")
+            if not getattr(self, "stopping", False):     # "Stopping..." stays until it has stopped
+                self.status.setText("Measuring: " + WORDS.get(ev.get("test"), "working").lower() + "...")
         elif kind == "speed_sample":
             self.graph.add(ev.get("test"), ev.get("offset_bytes", 0), ev.get("mib_per_s", 0))
         elif kind == "speed_result" and ev.get("test") in self.values:

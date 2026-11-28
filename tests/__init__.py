@@ -43,3 +43,39 @@ def _run_then_settle(self, result=None):
 
 
 unittest.TestCase.run = _run_then_settle
+
+
+def _no_real_question_boxes():
+    """A question box that nobody answers would hang the whole test run. In tests every real one answers
+    "No" at once; a test that wants "Yes" sets the tab's or the window's own confirm function."""
+    try:
+        from PySide6.QtWidgets import QMessageBox
+    except ImportError:
+        return
+    QMessageBox.question = staticmethod(lambda *args, **kwargs: QMessageBox.No)
+
+
+_no_real_question_boxes()
+
+
+WAIT_FOR_DRIVE_LIST = True      # a test that measures the waiting itself sets this to False for its duration
+
+
+def _first_drive_list_before_the_test_goes_on():
+    """The drive list is read off the window's thread, so a window is there before its drives are. Tests
+    written as "open the window, then look at the list" would look too early: after a drive panel is built in
+    a test, wait until its first list has arrived. The app itself never waits; that is tested on its own."""
+    try:
+        from diskygui import drivepanel
+    except ImportError:
+        return
+    built = drivepanel.DrivePanel.__init__
+
+    def build(self, *args, **kwargs):
+        built(self, *args, **kwargs)
+        if WAIT_FOR_DRIVE_LIST:
+            self.settle()
+    drivepanel.DrivePanel.__init__ = build
+
+
+_first_drive_list_before_the_test_goes_on()
