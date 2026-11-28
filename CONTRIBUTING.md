@@ -34,7 +34,8 @@ scheme or an engine command is one entry ([docs/BRICKS.md](docs/BRICKS.md)).
 
 - One job at a time: while a tab works (a long self-test too), the other tabs can be looked at but start nothing.
 - Self-tests are not offered for drives in USB cases.
-- No keyboard shortcuts yet (refresh, stop, quit).
+- The surface scan judges 1 MiB blocks: it does not name the single sector that failed. Drives with an NTFS
+  partition are not scanned.
 - The Speed tab shows no progress bar or time left.
 - A check's result does not name its partition, and after a repair the next repair question still quotes the
   earlier check.

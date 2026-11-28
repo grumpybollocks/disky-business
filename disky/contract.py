@@ -37,6 +37,11 @@ EVENTS = {
     "smart_data": {"device": STR, "data": DICT},
     "smart_deep": {"device": STR, "data": DICT},
     "fs_result": {"action": STR, "device": STR, "fs": STR, "ok": BOOL, "message": STR},
+    "surface_start": {"device": STR, "total_bytes": INT, "blocks": INT, "direct": BOOL},
+    "surface_blocks": {"first": INT, "count": INT, "state": STR},
+    "surface_progress": {"done_bytes": INT, "total_bytes": INT, "mib_per_s": NUM, "eta_s": OPT_INT},
+    "surface_result": {"device": STR, "total_bytes": INT, "read_bytes": INT, "blocks": DICT, "slowest_ms": NUM,
+                       "first_unreadable_offset": OPT_INT, "stopped": BOOL},
     "speed_phase": {"test": STR, "total_bytes": OPT_INT, "seconds": OPT_NUM},
     "speed_sample": {"test": STR, "offset_bytes": INT, "mib_per_s": NUM},
     "speed_result": {"test": STR, "mib_per_s": NUM, "iops": OPT_INT, "direct": OPT_BOOL,
@@ -50,9 +55,10 @@ OPTIONAL = {
     "trim_info": {"auto_discard": BOOL},
 }
 FRAG_STATES = {"free", "whole", "fragmented", "other"}
+SURFACE_STATES = {"fast", "slow", "very_slow", "unreadable"}
 SPEED_TESTS = {"seq_write", "seq_read", "rand_read", "rand_write"}
 PHASES = {"write", "verify"}
-MODES = {"test", "write", "verify", "clean", "speed", "fragscan", "defrag", "fragfiles", "trim", "fscheck", "fsrepair", "smart", "selftest", "helper", "defragall"}
+MODES = {"test", "write", "verify", "clean", "speed", "fragscan", "defrag", "fragfiles", "trim", "fscheck", "fsrepair", "smart", "selftest", "helper", "defragall", "surface"}
 BLOCK_STATES = {"written", "good", "changed", "bad", "overwritten"}
 VERDICTS = {"good", "bad", "not_verified", "nothing_to_check", "stopped"}
 
@@ -80,6 +86,13 @@ def problems(ev):
         out.append(f"start: unknown mode {ev['mode']}")
     if kind == "frag_blocks" and ev["state"] not in FRAG_STATES:
         out.append(f"frag_blocks: unknown state {ev['state']}")
+    if kind == "surface_blocks":
+        if ev["state"] not in SURFACE_STATES:
+            out.append(f"surface_blocks: unknown state {ev['state']}")
+        if ev["first"] < 0 or ev["count"] < 1:
+            out.append("surface_blocks: first must be >= 0 and count >= 1")
+    if kind == "surface_result" and set(ev["blocks"]) != SURFACE_STATES:
+        out.append("surface_result: blocks must hold fast, slow, very_slow, unreadable")
     if kind == "blocks":
         if ev["state"] not in BLOCK_STATES:
             out.append(f"blocks: unknown state {ev['state']}")

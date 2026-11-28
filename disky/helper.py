@@ -26,6 +26,7 @@ ALLOWED = {
     "fragscan": {},
     "smart": {"--deep": None, "--serial": None},
     "selftest": {"--kind": ("short", "long")},
+    "surface": {},
     "fscheck": {"--expect": EXPECT},
     "fsrepair": {"--yes": None, "--expect": EXPECT},
 }

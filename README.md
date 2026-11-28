@@ -15,12 +15,15 @@ Linux only. Works, not yet released.
 | **Test** | Fills the free space, reads it back from the drive (not from memory) and gives a plain verdict. Finds fake-capacity sticks and bad blocks. Uses the f3 / H2testw method and file format |
 | **Speed** | Sequential and small random reads and writes: four big results with bars, and a graph of the speed along the file |
 | **SMART** | The drive's own health record in plain words: worn-out spots, unreadable spots, cable errors, life left, temperature. Short and long self-tests. Drives in USB cases are read with `smartctl` after asking. **Deep scan**: maker, firmware, past errors, self-test history, lifetime statistics and a text report |
+| **Surface** | Reads the whole drive once without writing anything, times every block and maps the slow and the unreadable ones. Leaves drives with a Windows (NTFS) partition alone |
 | **Defrag** | How fragmented the files are. "Defragment all" works through every fragmented file on btrfs, ext4 and XFS with the system's own tool, and proves after each that its content is unchanged |
 | **Maintenance** | Checks a partition's file system and repairs it with the system's own tool, after showing the warnings that apply. For SSDs, says whether TRIM is needed (is Linux's weekly TRIM on, when did it last run) and offers "Trim now" |
 
 ![The SMART tab in plain words (example drive)](docs/screenshots/smart.png)
 
 ![Deep scan: identity and history of a drive (example drive)](docs/screenshots/deep.png)
+
+![Surface scan: slow and unreadable blocks on the map (example drive)](docs/screenshots/surface.png)
 
 Five looks: Modern light and Modern dark (following your system), Windows 98 style, Dark and Deep violet.
 
@@ -43,6 +46,7 @@ Five looks: Modern light and Modern dark (following your system), Windows 98 sty
 |---|---|
 | 120 GB SATA SSD in a USB case | Whole drive, written and read back: good, 40 min. One sector damaged on purpose was found exactly |
 | 500 GB hard disk in a USB case | 360 GiB of free space, written and read back: good, 5 h; the files already on it untouched |
+| 500 GB hard disk in a USB case | Surface scan through the window, read-only: the first 7 GiB at about 79 MiB/s, every block in good time, stopped within a second. A whole-drive pass has not been run yet |
 | Internal NVMe | TRIM through the window: 140 GiB trimmed |
 | 7 internal drives | SMART read and explained; item names match `smartctl` |
 | SATA SSD, SATA hard disk, NVMe, two drives in USB cases | Deep scan read by `disky smart --deep`; one drive's three logged errors shown |
@@ -56,6 +60,8 @@ Test files are read correctly by `f3read` 8.0, and `f3write` 8.0's files by Disk
 
 ## Latest changes (28 November 2026)
 
+- **Surface scan** (new tab): a read-only pass over the whole drive that maps slow and unreadable blocks.
+- **Other tabs can be looked at while one works**; they start nothing until it is done.
 - **Nothing crosses a drive that is being changed**: Check, Repair and Trim wait while a drive is being mounted
   or unmounted, and a repair runs only on the partition you confirmed, checked once more after your yes.
 - **A slow or failing drive no longer hangs the window**: the drive list, a drive's folder and its SMART record
@@ -69,7 +75,7 @@ Test files are read correctly by `f3read` 8.0, and `f3write` 8.0's files by Disk
 
 ## How it is tested
 
-About 300 automated tests, run on every change on two Python versions. Each new test is first shown to fail on
+About 330 automated tests, run on every change on two Python versions. Each new test is first shown to fail on
 broken code. Beyond that: independent code reviews, random and malformed data thrown at everything that reads
 outside input (drive service, smartctl, mount table, exFAT volumes, the admin helper), thousands of random
 clicks in the window, and faults injected into test files on a real disk, which must be found at the exact spot.
@@ -87,7 +93,7 @@ pip install '.[gui]'                    # or install it: gives `disky-business` 
 ```
 
 The engine also runs on its own: `disky test|write|verify|clean|speed|fragfiles|defrag|defragall|fragscan|trim|
-smart|selftest|fscheck|fsrepair <target>`. Every result is said in plain words; `--json` gives one line per
+smart|selftest|surface|fscheck|fsrepair <target>`. Every result is said in plain words; `--json` gives one line per
 event instead (see [docs/CONTRACT.md](docs/CONTRACT.md)). `disky smart <drive> --deep` is the Deep scan.
 
 ## More

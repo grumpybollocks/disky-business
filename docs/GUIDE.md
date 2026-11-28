@@ -75,6 +75,21 @@ listed first, problems in red; **Show all items** lists the rest.
 
 **Save report...** writes it all to a text file, the serial number left out unless ticked.
 
+## Surface: is every part of the drive readable?
+
+The surface scan reads the whole drive once, from the first block to the last, and times every block. It
+writes nothing, so it is safe on a drive with files on it, mounted or not. It needs the admin password and
+can take hours on a large or slow drive; **Stop** ends it at once and keeps what was found so far.
+
+- **Fast**: read in good time.
+- **Slow**: took over four times this drive's usual time. A few are normal (the drive was busy or waking up).
+- **Very slow**: over half a second for one block. The drive had to try hard: keep a backup and scan again.
+- **Unreadable**: the drive reported an error. This is damage: copy your files off the drive.
+
+One square stands for many blocks, and the worst block in it gives the colour, so damage is never hidden.
+Drives with a Windows (NTFS) partition are not scanned. The Test tab answers a different question: it writes
+to the free space and proves the drive stores data; the surface scan only reads, but reads everything.
+
 ## Defrag
 
 **Scan** shows how fragmented the files are and lists the worst. On btrfs, ext4 and XFS, **Defragment all**

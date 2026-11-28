@@ -27,6 +27,7 @@ To add something, write the piece and put it in the table; no other file changes
 | SMART by smartctl | `disky/smartread.py` | a drive name | `smart_data` (admin rights; read-only; name checked strictly; no serial number passed on). `smartctl()` holds the checks every smartctl call with admin rights goes through | `tests/test_smartread.py` |
 | Deep scan | `disky/smartdeep.py` | a drive name, `--serial` | `smart_deep`: smartctl -x sections named in `KEEP`, `maker` from the maker list, `production_date` (null); serial only when asked, the unique part of the world-wide name never | `tests/test_smartdeep.py` |
 | Bad-drive advice | `disky/advice.py` | — | the sentence shown with "Drive is bad", by the command line and the window | `test_cli_safety.py`, `test_gui_window.py` |
+| Surface scan (read-only) | `disky/surface.py` | a drive name | `surface_start`, `surface_blocks`, `surface_progress`, `surface_result` | `tests/test_surface.py` |
 | SMART self-test | `disky/selftest.py` | a drive name, short or long | `selftest_progress`, `selftest_result`; Stop aborts the test | `tests/test_selftest.py` |
 | Check and repair | `disky/fscare.py` | a partition name | `fs_result` (through the drive service; never mounted partitions, never NTFS) | `tests/test_fscare.py` |
 | Admin helper | `disky/helper.py` `ALLOWED` | request lines | the listed jobs, one at a time; `helper_done` after each | `tests/test_helper.py` |

@@ -8,7 +8,7 @@ import stat
 import sys
 import threading
 
-from . import __version__, advice, engine, exfat, frag, fscare, helper, mounts, proc, safety, selftest, smartdeep, smartread, speed, tips, trim
+from . import __version__, advice, engine, exfat, frag, fscare, helper, mounts, proc, safety, selftest, smartdeep, smartread, speed, surface, tips, trim
 
 EXIT = {"good": 0, "bad": 1, "not_verified": 2, "nothing_to_check": 3, "stopped": 130}
 _UNITS = {"K": 1 << 10, "M": 1 << 20, "G": 1 << 30, "T": 1 << 40}
@@ -114,6 +114,21 @@ class Printer:
                 self._say(f"  {w['pieces']} pieces  {human(w['bytes'])}  {w['path']}")
         elif kind == "fs_result":
             self._say(f"{ev['action'].capitalize()} of {ev['device']} ({ev['fs']}): {ev['message']}")
+        elif kind == "surface_start":
+            self._say(f"Reading {ev['device']}: {human(ev['total_bytes'])}, block by block. Nothing is written."
+                      + ("" if ev["direct"] else " (This drive is read through the system's cache.)"))
+        elif kind == "surface_progress":
+            pct = 100 * ev["done_bytes"] / ev["total_bytes"] if ev["total_bytes"] else 0
+            self.err.write(f"\r  {pct:5.1f} %  {ev['mib_per_s']:7.1f} MiB/s   ")
+            self.err.flush()
+            self.line_open = True
+        elif kind == "surface_blocks" and ev["state"] != "fast":
+            self._say(f"  {ev['state'].replace('_', ' ')}: {ev['count']} block(s) from {ev['first']} MiB")
+        elif kind == "surface_result":
+            b = ev["blocks"]
+            self._say(("Stopped early. " if ev["stopped"] else "")
+                      + f"{ev['device']}: {b.get('fast', 0)} blocks fast, {b.get('slow', 0)} slow, "
+                      f"{b.get('very_slow', 0)} very slow, {b.get('unreadable', 0)} unreadable. Slowest block: {ev['slowest_ms']} ms.")
         elif kind == "selftest_progress":
             self.err.write(f"\rSelf-test running: {ev['percent']} %   ")
             self.err.flush()
@@ -369,6 +384,19 @@ def _selftest(args, emit, stop):
     return 130 if status == "aborted" and stop.is_set() else 0 if ok else 1
 
 
+def _surface(args, emit, stop):
+    try:
+        r = surface.scan(args.folder, emit, stop)
+    except PermissionError as e:
+        emit({"event": "error", "code": "needs_admin", "message": str(e)})
+        return 3
+    except (ValueError, OSError) as e:
+        emit({"event": "error", "code": "refused", "message": str(e)})
+        return 3
+    emit({"event": "done", "stopped": r["stopped"]})
+    return 130 if r["stopped"] else 1 if r["blocks"]["unreadable"] else 0
+
+
 def _selftest_options(s):
     s.add_argument("--kind", choices=sorted(selftest.KINDS), default="short",
                    help="short (a few minutes) or long (the whole surface; can take hours)")
@@ -483,12 +511,14 @@ COMMANDS = {c.name: c for c in (
             "checked after each (btrfs, ext4, XFS)", _defragall),
     Command("trim", "tell the drive which space is free (the system's fstrim; needs admin rights)", _trim),
     Command("helper", "the admin helper the window keeps for a session: runs trim, fragscan, smart, selftest, "
-            "fscheck and fsrepair on request (see disky/helper.py)", _helper, target="any",
+            "surface, fscheck and fsrepair on request (see disky/helper.py)", _helper, target="any",
             target_help="a name for the session; not used"),
     Command("smart", "read-only: the drive's SMART record through smartctl (needs admin rights; for USB cases "
             "and the deep scan)", _smart, _smart_options, target="any", target_help="the drive, e.g. sdX"),
     Command("selftest", "let the drive run its own SMART self-test and follow it (the system asks for the "
             "admin password)", _selftest, _selftest_options, target="any", target_help="the drive, e.g. sdX"),
+    Command("surface", "read-only: read the whole drive, time every block, report slow and unreadable ones "
+            "(needs admin rights; can take hours)", _surface, target="any", target_help="the drive, e.g. sdX"),
     Command("fscheck", "read-only: is this partition's file system sound? (the system's own tool)", _fscare,
             _expect_option,
             target="any", target_help="the partition, e.g. sdX1; it must not be mounted"),

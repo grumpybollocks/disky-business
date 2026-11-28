@@ -13,7 +13,7 @@ import sys
 from PySide6.QtCore import QObject, QProcess, QProcessEnvironment, Signal
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-JOBS = ("trim", "fragscan", "smart", "selftest", "fscheck", "fsrepair")    # what the helper accepts
+JOBS = ("trim", "fragscan", "smart", "selftest", "surface", "fscheck", "fsrepair")    # what the helper accepts
 
 
 def admin_wrap():

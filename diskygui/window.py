@@ -22,6 +22,7 @@ from .maintenancetab import MaintenanceTab
 from .defragtab import DefragTab
 from .smarttab import SmartTab
 from .speedtab import SpeedTab
+from .surfacetab import SurfaceTab
 from .tabbase import TabBase
 from .icons import dress
 from .theme import DEFAULT_THEME, THEMES, default_theme
@@ -365,7 +366,7 @@ CLOSE_REPAIR = ("A repair is running. Stopping it half way can leave the file sy
 
 
 class MainWindow(QMainWindow):
-    TABS = (TestTab, SpeedTab, SmartTab, DefragTab, MaintenanceTab)
+    TABS = (TestTab, SpeedTab, SmartTab, SurfaceTab, DefragTab, MaintenanceTab)
 
     def __init__(self, theme=None, runner=None, drives=None, runners=None, admin=None):
         runners = dict(runners or {})

@@ -136,6 +136,41 @@ def main():
             sys.argv[2:] = [req["cmd"], req["target"], "--json", *req["options"]]
             say(event="helper_done", code=main())
         return 0
+    if mode == "surface":
+        say(event="start", contract=1, version="fake", mode=mode, block_bytes=MIB, sector_bytes=512)
+        if scenario == "refuse":
+            say(event="error", code="refused", message="sdz is not a drive (was it unplugged?).")
+            return 3
+        blocks = 400
+        say(event="surface_start", device=sys.argv[3], total_bytes=blocks * MIB, blocks=blocks, direct=True)
+        counts = {"fast": 0, "slow": 0, "very_slow": 0, "unreadable": 0}
+
+        def mark(first, count, state):
+            say(event="surface_blocks", first=first, count=count, state=state)
+            counts[state] += count
+            say(event="surface_progress", done_bytes=(first + count) * MIB, total_bytes=blocks * MIB,
+                mib_per_s=100.0, eta_s=7)
+        if scenario == "slow":
+            stop = []
+            signal.signal(signal.SIGINT, lambda *_: stop.append(1))
+            done = 0
+            while not stop and done < 200:
+                mark(done, 1, "fast")
+                done += 1
+                time.sleep(0.02)
+        elif scenario == "bad":
+            for first, count, state in ((0, 100, "fast"), (100, 3, "slow"), (103, 97, "fast"), (200, 1, "very_slow"),
+                                        (201, 99, "fast"), (300, 2, "unreadable"), (302, 98, "fast")):
+                mark(first, count, state)
+            done = blocks
+        else:
+            mark(0, blocks, "fast")
+            done = blocks
+        say(event="surface_result", device=sys.argv[3], total_bytes=blocks * MIB,
+            read_bytes=(done - counts["unreadable"]) * MIB, blocks=counts, slowest_ms=12.5,
+            first_unreadable_offset=300 * MIB if counts["unreadable"] else None, stopped=done < blocks)
+        say(event="done", stopped=done < blocks)
+        return 130 if done < blocks else 1 if counts["unreadable"] else 0
     if mode == "selftest":
         say(event="start", contract=1, version="fake", mode=mode, block_bytes=MIB, sector_bytes=512)
         if scenario == "refuse":

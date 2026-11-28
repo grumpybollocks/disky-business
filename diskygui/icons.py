@@ -94,7 +94,7 @@ SHAPES = {"play": _play, "stop": _stop, "refresh": _refresh, "eject": _eject, "b
 
 # What a button says -> its icon. A button whose text changes (Start / Stop) gets the icon that fits.
 BUTTON_ICONS = {
-    "Start test": "play", "Stop test": "stop", "Start": "play", "Start speed test": "play", "Stop": "stop",
+    "Start test": "play", "Stop test": "stop", "Start": "play", "Start speed test": "play", "Start surface scan": "play", "Stop": "stop",
     "Check test files again": "tick", "Delete test files": "bin",
     "Scan": "search", "Defragment all": "play",
     "Check": "tick", "Repair": "plus", "Trim now": "play",

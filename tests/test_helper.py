@@ -21,7 +21,7 @@ class Requests(unittest.TestCase):
         self.assertEqual(helper.request(ask("selftest", "sdb", ["--kind", "long"])),
                          ["selftest", "sdb", "--json", "--kind", "long"])
         self.assertEqual(helper.request(ask("fsrepair", "sdb1", ["--yes"])), ["fsrepair", "sdb1", "--json", "--yes"])
-        self.assertEqual(sorted(helper.ALLOWED), ["fragscan", "fscheck", "fsrepair", "selftest", "smart", "trim"])
+        self.assertEqual(sorted(helper.ALLOWED), ["fragscan", "fscheck", "fsrepair", "selftest", "smart", "surface", "trim"])
 
     def test_everything_else_is_refused(self):
         bad = [ask(c) for c in ("test", "write", "clean", "speed", "defrag", "verify", "helper", "", "rm", None)]
