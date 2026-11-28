@@ -320,6 +320,8 @@ def system_is_dark():
 TIP_SECONDS = 30            # how long one tip stays; long enough to read it and get the joke
 
 
+CLOSE_DRIVE = ("A drive is being mounted, unmounted or looked at right now. Closing the window now can leave that "
+               "half done. Close anyway?")
 CLOSE_REPAIR = ("A repair is running. Stopping it half way can leave the file system worse than before. Wait "
                 "until it has finished. Close anyway?")
 
@@ -399,7 +401,7 @@ class MainWindow(QMainWindow):
     def on_tab(self, index):
         """The drive picked on one tab is the drive on the next. While a tab works, no other can be opened,
         also not with the keyboard (Ctrl+Tab), so two jobs never run at once."""
-        busy = next((i for i, p in enumerate(self.pages) if p.mode is not None or p.panel.acting), None)
+        busy = next((i for i, p in enumerate(self.pages) if p.working), None)
         if busy is not None and index != busy:
             self.tabs.blockSignals(True)
             self.tabs.setCurrentIndex(busy)
@@ -415,12 +417,12 @@ class MainWindow(QMainWindow):
         self.admin_button.setVisible(is_open)
 
     def end_admin(self):
-        if not any(p.mode is not None for p in self.pages):     # never under a running job
+        if not any(p.working for p in self.pages):              # never under a running job
             self.admin.end()
 
     def on_busy(self, busy):
         """One job at a time: while a tab works, the others cannot be opened."""
-        self.tabs.tabBar().setEnabled(not busy)
+        self.tabs.tabBar().setEnabled(not any(p.working for p in self.pages))
         dress(self, self.theme)                         # Start became Stop, or the other way round
 
     def _label_theme_button(self):
@@ -459,10 +461,14 @@ class MainWindow(QMainWindow):
                                     QMessageBox.No) == QMessageBox.Yes
 
     def closeEvent(self, event):
-        busy = next((p for p in self.pages if p.mode is not None), None)
+        busy = next((p for p in self.pages if p.working), None)
         if busy is not None:
-            text = (CLOSE_REPAIR if busy.mode == "repair" else
-                    f"The {busy.title} tab is still working ({busy.mode}). Closing the window stops it. Close anyway?")
+            if busy.mode == "repair":
+                text = CLOSE_REPAIR
+            elif busy.mode is not None:
+                text = f"The {busy.title} tab is still working ({busy.mode}). Closing the window stops it. Close anyway?"
+            else:
+                text = CLOSE_DRIVE
             if not self.confirm_close(text):
                 event.ignore()
                 return

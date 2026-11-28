@@ -153,11 +153,11 @@ class TrimTab(TabBase):
                 "files are not touched. It needs admin rights."]))
 
     def update_buttons(self):
-        self.go.setEnabled(self.mode is None and bool(self.targets))
+        self.go.setEnabled(self.mode is None and bool(self.targets) and not self.panel.acting)
         self.panel.set_busy(self.mode is not None)
 
     def start(self):
-        if self.mode is None and self.targets and self.confirm(
+        if self.mode is None and self.targets and not self.panel.acting and self.confirm(
                 f"Run TRIM on {', '.join(self.targets)}?\nIt tells the drive which space is free; files are not "
                 "touched. " + self.password_words()):
             self.error = self.result = None

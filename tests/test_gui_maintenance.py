@@ -94,7 +94,7 @@ class Tab(unittest.TestCase):
         self.assertEqual(self.buttons(tab), (False, False))     # and no second click meanwhile
         self.assertTrue(tab.panel.settle())
         self.wait(tab)
-        self.assertEqual(tab.runner.last_argv[-4:], ["fscheck", "sdz1", "--json", "--stdin-stop"])
+        self.assertEqual(tab.runner.last_argv[-6:], ["fscheck", "sdz1", "--json", "--stdin-stop", "--expect", "vfat:1073741824"])
 
     def test_check_then_repair_with_the_question_first(self):
         tab = self.open("bad", [usb(Volume("sdz1", 1 << 30, "vfat", []))])
@@ -110,7 +110,7 @@ class Tab(unittest.TestCase):
         self.assertEqual(self.buttons(tab), (False, False))                 # one job at a time
         self.assertFalse(self.win.tabs.tabBar().isEnabled())
         self.wait(tab)
-        self.assertEqual(tab.runner.last_argv[-4:], ["fscheck", "sdz1", "--json", "--stdin-stop"])
+        self.assertEqual(tab.runner.last_argv[-6:], ["fscheck", "sdz1", "--json", "--stdin-stop", "--expect", "vfat:1073741824"])
         self.assertEqual((tab.maint_status.text(), tab.checked), ("Problems found.", {("/p/usb", "sdz1"): False}))
         asked = []
         tab.confirm = lambda text: asked.append(text) or False
@@ -118,12 +118,12 @@ class Tab(unittest.TestCase):
         tab.panel.settle()
         self.assertEqual((len(asked), tab.mode), (1, None))                 # said no: nothing runs
         self.assertIn("The last check found problems.", asked[0])
-        self.assertEqual(tab.runner.last_argv[-4], "fscheck")
+        self.assertEqual(tab.runner.last_argv[-6], "fscheck")
         tab.confirm = lambda text: True
         tab.repair_button.click()
         tab.panel.settle()
         self.wait(tab)
-        self.assertEqual(tab.runner.last_argv[-5:], ["fsrepair", "sdz1", "--json", "--stdin-stop", "--yes"])
+        self.assertEqual(tab.runner.last_argv[-7:], ["fsrepair", "sdz1", "--json", "--stdin-stop", "--yes", "--expect", "vfat:1073741824"])
         self.assertIn("on EXAMPLE USB?", asked[0])
         self.assertEqual(tab.maint_status.text(), "Repaired.")
 

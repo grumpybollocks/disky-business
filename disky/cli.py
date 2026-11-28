@@ -381,7 +381,8 @@ def _fscare(args, emit, stop):
                          "run fscheck to see whether it is needed, then add --yes."})
         return 3
     try:
-        r = fscare.act("check" if args.cmd == "fscheck" else "repair", args.folder)
+        r = fscare.act("check" if args.cmd == "fscheck" else "repair", args.folder,
+                       expect=fscare.expected(args.expect))
     except fscare.Refused as e:
         emit({"event": "error", "code": "refused", "message": str(e)})
         return 3
@@ -390,8 +391,14 @@ def _fscare(args, emit, stop):
     return 0 if r["ok"] else 1
 
 
+def _expect_option(s):
+    s.add_argument("--expect", metavar="FS:SIZE", default="",
+                   help="only if the partition has this file system and size in bytes (what was confirmed)")
+
+
 def _repair_options(s):
     s.add_argument("--yes", action="store_true", help="really repair: I have a copy of what matters")
+    _expect_option(s)
 
 
 def _is_block_device(path):
@@ -483,6 +490,7 @@ COMMANDS = {c.name: c for c in (
     Command("selftest", "let the drive run its own SMART self-test and follow it (the system asks for the "
             "admin password)", _selftest, _selftest_options, target="any", target_help="the drive, e.g. sdX"),
     Command("fscheck", "read-only: is this partition's file system sound? (the system's own tool)", _fscare,
+            _expect_option,
             target="any", target_help="the partition, e.g. sdX1; it must not be mounted"),
     Command("fsrepair", "repair this partition's file system with the system's own tool; it CHANGES the drive",
             _fscare, _repair_options, target="any", target_help="the partition, e.g. sdX1; it must not be mounted"),

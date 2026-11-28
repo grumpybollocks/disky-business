@@ -89,6 +89,8 @@ class TabBase(QWidget):
         self.confirm = lambda text: QMessageBox.question(self, "Disky Business", text) == QMessageBox.Yes
         self.panel = DrivePanel(drives, self.NOTE, self.FOLDER_HEADING, uses_folder=self.USES_FOLDER)
         self.panel.changed.connect(self.on_folder)
+        self.panel.working_changed.connect(self.working_changed)
+        self.verifying = False                          # a drive is being read again before a job starts
 
     # -- helpers for building the right-hand side ------------------------------------------------------------
     def progress_line(self):
@@ -172,6 +174,16 @@ class TabBase(QWidget):
 
     def set_folder(self, path):
         self.panel.set_folder(path)
+
+    @property
+    def working(self):
+        """True while anything is under way that another job must not cross: a job, a drive being mounted or
+        unmounted, or the re-read of a drive before a job. The window locks the other tabs on this."""
+        return self.mode is not None or self.panel.acting or self.verifying
+
+    def working_changed(self):
+        self.update_buttons()
+        self.busy_changed.emit(self.working)
 
     def set_busy(self, mode):
         """Enter a job (a name) or leave it (None). Tells the window, which locks the other tabs."""

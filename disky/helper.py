@@ -12,18 +12,22 @@ A request is one JSON line: {"cmd": "trim", "target": "/some/folder", "options":
 the job that is running. Every job ends with {"event": "helper_done", "code": <the command's exit code>}.
 """
 import json
+import re
 import queue
 import sys
 import threading
 
-# command -> the options the window may pass (a value is listed when the option takes one)
+EXPECT = re.compile(r"[a-z0-9_]{0,16}:[0-9]{1,20}")      # file system and size of the partition that was confirmed
+
+# command -> the options the window may pass: None = no value, a tuple = one of these values, a pattern = a
+# value that must match it as a whole
 ALLOWED = {
     "trim": {},
     "fragscan": {},
     "smart": {"--deep": None, "--serial": None},
     "selftest": {"--kind": ("short", "long")},
-    "fscheck": {},
-    "fsrepair": {"--yes": None},
+    "fscheck": {"--expect": EXPECT},
+    "fsrepair": {"--yes": None, "--expect": EXPECT},
 }
 IDLE_SECONDS = 900
 MAX_LINE = 8192
@@ -57,7 +61,10 @@ def request(line):
             raise Refused(f"The admin helper does not accept {name[:40]!r} for {cmd}.")
         checked.append(name)
         if allowed[name] is not None:
-            if i + 1 >= len(options) or options[i + 1] not in allowed[name]:
+            ok = i + 1 < len(options) and (
+                allowed[name].fullmatch(options[i + 1]) is not None if hasattr(allowed[name], "fullmatch")
+                else options[i + 1] in allowed[name])
+            if not ok:
                 raise Refused(f"The value for {name} is not acceptable.")
             checked.append(options[i + 1])
             i += 1

@@ -137,7 +137,8 @@ class MaintenanceTab(TrimTab):
         super().update_buttons()
         if hasattr(self, "check_button"):
             v = self.picked()
-            ready = self.mode is None and not self.verifying and v is not None and advice(v)[0]
+            ready = (self.mode is None and not self.verifying and not self.panel.acting
+                     and v is not None and advice(v)[0])
             self.check_button.setEnabled(ready)
             self.repair_button.setEnabled(ready)
 
@@ -147,26 +148,29 @@ class MaintenanceTab(TrimTab):
         now, or say why not. A name like sdb1 can belong to another drive once drives were unplugged and plugged
         in, so nothing is done on the strength of the old list."""
         v, d = self.picked(), self.panel.current_drive()
-        if v is None or d is None or not advice(v)[0] or self.mode is not None or self.verifying:
+        if (v is None or d is None or not advice(v)[0] or self.mode is not None or self.verifying
+                or self.panel.acting):                  # never while the drive is being mounted or unmounted
             return
         self.verifying = True                           # no second click while the system answers
-        self.update_buttons()
+        self.working_changed()                          # and no other tab meanwhile
         read = self.panel.read_drives
         self.panel.later(lambda: fresh(read, d), self.verified, d, v, go)
 
     def verified(self, d, v, go, now):
         self.verifying = False
-        if self.mode is not None or self.picked() is not v or self.panel.current_drive() is not d:
-            self.update_buttons()
+        if (self.mode is not None or self.panel.acting or self.picked() is not v
+                or self.panel.current_drive() is not d):
+            self.working_changed()
             return                                      # the user picked something else meanwhile
         now = now if isinstance(now, Drive) else None
         same = next((x for x in now.volumes if x.device == v.device), None) if now else None
         if same is None or (same.fstype, same.size) != (v.fstype, v.size) or not advice(same)[0]:
             self.panel.load_drives()                    # shows the drives as they are; nothing stays picked
             self.maint_status.setText("The drives changed since the list was read. Pick the drive again.")
-            self.update_buttons()
+            self.working_changed()
             return
         go(now, same)
+        self.working_changed()
 
     def check(self):
         self.still_there(self.start_check)
@@ -180,16 +184,22 @@ class MaintenanceTab(TrimTab):
     def ask_repair(self, d, v):
         if self.confirm(repair_question(v, self.checked.get((d.path, v.device)), d.health.state == "failing",
                                         d.model)):
-            self._maint("repair", "fsrepair", "Repairing... do not unplug the drive.", d, v, "--yes")
+            # The question can stay open for any length of time: the drive is read once more after the yes,
+            # so the repair runs on the partition that was confirmed and on nothing else.
+            self.still_there(self.start_repair)
         else:
             self.update_buttons()
+
+    def start_repair(self, d, v):
+        self._maint("repair", "fsrepair", "Repairing... do not unplug the drive.", d, v, "--yes")
 
     def _maint(self, mode, command, words, d, v, *options):
         self.error = self.maint_result = None
         self.maint_device = (d.path, v.device)
         self.maint_status.setText(words)
         self.set_busy(mode)
-        self.runner.start(command, v.device, *options, admin="if_open")
+        # The engine is told what was confirmed and refuses anything else under that name.
+        self.runner.start(command, v.device, *options, "--expect", f"{v.fstype}:{v.size}", admin="if_open")
 
     def on_event(self, ev):
         if ev.get("event") == "fs_result":

@@ -217,5 +217,127 @@ class Hunt(unittest.TestCase):
         tab.set_busy(None)
 
 
+    # -- audit of 2026-11-28 (C1-C8) ---------------------------------------------------------------------------
+    def maintenance(self, drives):
+        win = self.open(drives)
+        tab = self.page(win, "Maintenance")
+        self.pick(tab, 0)
+        return win, tab
+
+    def test_c1_no_check_repair_or_trim_while_the_drive_is_being_mounted(self):
+        win, tab = self.maintenance([drive("A", [], usb=True)])
+        self.assertTrue(tab.check_button.isEnabled() and tab.repair_button.isEnabled())
+        tab.panel.actions = mock.Mock(mount=lambda x: (time.sleep(0.6), (True, "Mounted."))[1],
+                                      can_mount=lambda x: True, can_unmount=lambda x: False,
+                                      can_remove=lambda x: False)
+        tab.panel.update_actions()
+        tab.panel.mount_button.click()
+        self.assertTrue(tab.panel.acting)
+        self.assertEqual((tab.check_button.isEnabled(), tab.repair_button.isEnabled(), tab.go.isEnabled()),
+                         (False, False, False))                 # the mount would land on a repair
+        started = []
+        tab.runner.start = lambda *a, **k: started.append(a)
+        tab.confirm = lambda text: True
+        tab.targets = ["/somewhere"]                            # even if TRIM had something to do
+        tab.check()
+        tab.repair()
+        tab.start()
+        self.assertFalse(tab.verifying)
+        tab.panel.settle()
+        self.assertEqual(started, [])
+        self.assertFalse(tab.panel.acting)
+
+    def test_c2_c7_no_other_tab_and_no_silent_close_while_the_drive_is_read_again(self):
+        d = drive("A", [], usb=True)
+        win, tab = self.maintenance([d])
+        tab.panel.read_drives = lambda: (time.sleep(0.5), [d])[1]
+        tab.confirm = lambda text: False                        # the question comes; the answer is no
+        here = win.tabs.currentIndex()
+        tab.repair_button.click()
+        self.assertTrue(tab.verifying and tab.working)
+        self.assertFalse(win.tabs.tabBar().isEnabled())
+        win.tabs.setCurrentIndex(1)                             # what Ctrl+Tab does
+        self.assertEqual(win.tabs.currentIndex(), here)         # the question never appears over another tab
+        asked = []
+        win.confirm_close = lambda text: asked.append(text) or False
+        win.close()
+        from diskygui import window
+        self.assertEqual(asked, [window.CLOSE_DRIVE])
+        tab.panel.settle()
+        self.assertFalse(tab.working)
+        self.assertTrue(win.tabs.tabBar().isEnabled())
+        win.confirm_close = lambda text: True
+
+    def test_c3_the_drive_is_read_once_more_after_the_yes(self):
+        first, second = drive("A", [], usb=True, path="/p/a"), drive("B", [], usb=True, path="/p/b")
+        now = [first]
+        win, tab = self.maintenance(lambda: list(now))
+        started = []
+        tab.runner.start = lambda *a, **k: started.append(a)
+
+        def yes_but_the_drive_was_swapped_meanwhile(text):
+            now[:] = [second]                                   # same name sdX1, another drive
+            return True
+        tab.confirm = yes_but_the_drive_was_swapped_meanwhile
+        tab.repair_button.click()
+        tab.panel.settle()
+        self.assertEqual(started, [])                           # nothing runs on a drive that was not confirmed
+        self.assertIn("The drives changed", tab.maint_status.text())
+        self.assertFalse(tab.working)
+
+    def test_c4_c5_switching_tabs_while_drive_lists_are_on_their_way(self):
+        import tests
+        tests.WAIT_FOR_DRIVE_LIST = False                       # this test is about lists still in flight
+        self.addCleanup(setattr, tests, "WAIT_FOR_DRIVE_LIST", True)
+        d = drive("A", [self.folder()])
+        win = MainWindow(theme=THEMES["w98"], runner=EngineRunner([sys.executable, "-c", "pass"]),
+                         drives=lambda: (time.sleep(0.4), [d])[1])
+        self.addCleanup(win.close)
+        win.confirm_close = lambda text: True
+        for page in win.pages:
+            page.panel.read_smart = lambda d: ([], "")
+        win.tabs.setCurrentIndex(1)                             # the first tab is still reading its list
+        second = win.pages[1]
+        self.assertTrue(second.panel.settle())
+        self.assertEqual(second.panel.drive_list.count(), 1)    # not an empty list waiting for ever
+        self.assertNotIn("Reading", second.panel.health.text())
+        for page in win.pages:
+            page.panel.settle()
+        self.pick(second, 0)
+        third = win.pages[2]
+        third.panel.load_drives()                               # its own list is on its way ...
+        win.tabs.setCurrentIndex(2)                             # ... when the picked drive arrives from the last tab
+        self.assertTrue(third.panel.settle())
+        self.assertEqual((third.panel.row(), third.panel.drive_list.count()), (0, 1))   # the late list did not unpick it
+
+    def test_c6_a_drive_action_always_ends_and_one_bad_answer_does_not_hold_the_rest(self):
+        win = self.open([drive("A", [self.folder()])])
+        panel = win.pages[0].panel
+        panel.acting = True
+        panel.load_drives(lambda: setattr(panel, "acting", False))  # what a drive action waits for
+        panel.load_drives()                                     # and something else reads the list again
+        self.assertTrue(panel.settle())
+        self.assertFalse(panel.acting)                          # the first was not dropped
+        ran = []
+        panel.later(lambda: 1, lambda result: 1 / 0)            # an answer that cannot be shown
+        panel.later(lambda: 2, ran.append)
+        panel.acting = True
+        self.assertTrue(panel.settle())
+        self.assertEqual((ran, len(panel.failed), panel.acting), ([2], 1, False))
+
+    def test_c8_closing_during_a_repair_gets_the_stronger_warning(self):
+        from diskygui import window
+        win = self.open([])
+        win.show()
+        asked = []
+        win.confirm_close = lambda text: asked.append(text) or False
+        page = self.page(win, "Maintenance")
+        page.set_busy("repair")
+        win.close()
+        self.assertEqual(asked, [window.CLOSE_REPAIR])
+        self.assertNotEqual(window.CLOSE_REPAIR, window.CLOSE_DRIVE)
+        self.assertTrue(win.isVisible())
+        page.set_busy(None)
+
 if __name__ == "__main__":
     unittest.main()

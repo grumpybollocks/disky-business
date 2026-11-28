@@ -92,6 +92,7 @@ READING = "Reading the drive list..."
 
 class DrivePanel(QWidget):
     changed = Signal(str, str)      # folder ("" when there is none), a line to show the user ("" when none)
+    working_changed = Signal()      # a drive action began or ended: tabs lock or free what depends on the drive
 
     def __init__(self, read_drives=None, note="", folder_heading="Works in", parent=None, uses_folder=True):
         super().__init__(parent)
@@ -119,6 +120,9 @@ class DrivePanel(QWidget):
         self.looking = None                             # the drive whose folder is being looked for
         self.looks = 0
         self.lists = 0                                  # only the newest drive list counts
+        self.loading = False                            # a drive list is being read now
+        self.after_list = []                            # what waits for the next list; never dropped
+        self.failed = []                                # callbacks that raised (shown by tests, not by the window)
         self.uses_folder = uses_folder
         self.collector = QTimer(self)
         self.collector.setInterval(40)
@@ -190,12 +194,16 @@ class DrivePanel(QWidget):
         if picked:                      # the list is read again: the drive picked before is no longer picked,
             self.set_folder("", "")     # and every tab is told, also when it had no folder (an unmounted drive)
         self.update_actions()
+        if then is not None:
+            self.after_list.append(then)                # kept across a newer read: it runs after the newest list
         self.lists += 1
-        self.later(self.read_drives, self.drives_read, self.lists, then)
+        self.loading = True
+        self.later(self.read_drives, self.drives_read, self.lists)
 
-    def drives_read(self, number, then, result):
+    def drives_read(self, number, result):
         if number != self.lists:
             return                                      # Refresh was pressed again meanwhile
+        self.loading = False
         self.drives = result if isinstance(result, list) else []
         self.drive_list.blockSignals(True)
         self.drive_list.clear()
@@ -204,7 +212,8 @@ class DrivePanel(QWidget):
         self.health.setText("" if self.drives else "Drive list not available." + (
             " Choose a folder below." if self.uses_folder else ""))
         self.update_actions()
-        if then is not None:
+        waiting, self.after_list = self.after_list, []
+        for then in waiting:
             then()
 
     def update_actions(self):
@@ -233,6 +242,7 @@ class DrivePanel(QWidget):
             return
         self.acting = True                              # a second click while this one works does nothing
         self.lock()                                     # and nothing else starts on a drive being changed
+        self.working_changed.emit()
         self.set_folder("", "")
         self.action_note.setText({"mount": "Mounting...", "unmount": "Unmounting...",
                                   "remove": "Switching off..."}[job])
@@ -256,6 +266,7 @@ class DrivePanel(QWidget):
                 self.drive_list.setCurrentRow(same)     # picked by the user before; shows its new state
             self.update_actions()
             self.action_note.setText(message)
+            self.working_changed.emit()
         self.load_drives(again)
 
     # -- slow work off the window's thread ---------------------------------------------------------------------
@@ -270,7 +281,15 @@ class DrivePanel(QWidget):
         if not self.jobs:
             self.collector.stop()
         for job, first in ready:
-            job.then(*first, job.result)
+            try:
+                job.then(*first, job.result)
+            except Exception as e:                      # one answer that cannot be shown must not hold the rest,
+                self.failed.append(repr(e))             # nor leave the panel locked for good
+                if self.acting:
+                    self.acting = False
+                    self.lock()
+                    self.update_actions()
+                    self.working_changed.emit()
 
     def settle(self, seconds=15.0):
         """Wait until the slow work under way has finished and been shown (used by tests and scripts)."""
@@ -382,6 +401,14 @@ class DrivePanel(QWidget):
         """Take over what another tab's panel shows, so the user picks a drive once."""
         if other is self or (other.drives is self.drives and other.folder == self.folder
                              and other.row() == self.row()):
+            return
+        self.lists += 1                                 # a list of our own still on its way no longer counts
+        self.loading = False
+        waiting, self.after_list = self.after_list, []
+        for then in waiting:
+            then()
+        if other.loading:                               # the other tab is still reading: read our own, do not
+            self.load_drives()                          # copy its empty list and wait for an answer that never comes
             return
         self.drives = other.drives
         self.drive_list.blockSignals(True)

@@ -64,7 +64,7 @@ class Rules(unittest.TestCase):
         for cmd, answer, code in (("fscheck", True, 0), ("fscheck", False, 1), ("fsrepair", True, 0)):
             run, called = service(answer=answer)
             out = io.StringIO()
-            with mock.patch.object(fscare.proc, "run", run), mock.patch.object(fscare.act, "__defaults__", (run, 6 * 3600)), \
+            with mock.patch.object(fscare.proc, "run", run), mock.patch.object(fscare.act, "__defaults__", (run, 6 * 3600, None)), \
                     mock.patch.object(fscare.facts, "__defaults__", (run,)), redirect_stdout(out):
                 got = cli.main([cmd, "sdz1", "--json"] + (["--yes"] if cmd == "fsrepair" else []))
             events = [json.loads(line) for line in out.getvalue().splitlines()]
@@ -72,14 +72,14 @@ class Rules(unittest.TestCase):
             self.assertEqual((got, events[1]["event"], events[1]["ok"]), (code, "fs_result", answer))
         run, _ = service(fs="ntfs")
         out = io.StringIO()
-        with mock.patch.object(fscare.act, "__defaults__", (run, 1)), redirect_stdout(out):
+        with mock.patch.object(fscare.act, "__defaults__", (run, 1, None)), redirect_stdout(out):
             self.assertEqual(cli.main(["fsrepair", "sdz1", "--json", "--yes"]), 3)
         self.assertIn("refused", out.getvalue())
 
     def test_repair_from_the_command_line_needs_yes(self):
         run, called = service()
         out = io.StringIO()
-        with mock.patch.object(fscare.act, "__defaults__", (run, 1)), \
+        with mock.patch.object(fscare.act, "__defaults__", (run, 1, None)), \
                 mock.patch.object(fscare.facts, "__defaults__", (run,)), redirect_stdout(out):
             self.assertEqual(cli.main(["fsrepair", "sdz1", "--json"]), 3)
         self.assertEqual(called, [])
@@ -94,6 +94,37 @@ class Rules(unittest.TestCase):
             fscare.act("repair", "sdz1", run)
         self.assertIn("gave no answer", str(e.exception))
 
+
+    def test_only_the_partition_that_was_confirmed(self):
+        def sized(size, fs="vfat"):
+            called = []
+
+            def run(cmd, **kw):
+                if "get-property" in cmd:
+                    data = {"IdType": fs, "Size": size}.get(cmd[-1], [])
+                    return subprocess.CompletedProcess(cmd, 0, json.dumps({"type": "x", "data": data}), "")
+                called.append(cmd[cmd.index("call") + 4])
+                return subprocess.CompletedProcess(cmd, 0, json.dumps({"type": "b", "data": [True]}), "")
+            return run, called
+        run, called = sized(1000)
+        self.assertTrue(fscare.act("repair", "sdz1", run, expect=("vfat", 1000))["ok"])
+        self.assertEqual(called, ["Repair"])
+        for other in (sized(2000), sized(1000, "ext4")):            # another drive now answers to sdz1
+            run, called = other
+            with self.assertRaises(fscare.Refused) as e:
+                fscare.act("repair", "sdz1", run, expect=("vfat", 1000))
+            self.assertEqual((called, str(e.exception)), ([], fscare.NOT_THE_ONE))
+        self.assertEqual((fscare.expected("vfat:1000"), fscare.expected(":5"), fscare.expected("")),
+                         (("vfat", 1000), ("", 5), None))
+        with self.assertRaises(fscare.Refused):
+            fscare.expected("vfat:big")
+        from disky import helper
+        ask = lambda opts: helper.request(json.dumps({"cmd": "fsrepair", "target": "sdz1", "options": opts}))  # noqa: E731
+        self.assertEqual(ask(["--yes", "--expect", "vfat:1000"]), ["fsrepair", "sdz1", "--json", "--yes", "--expect", "vfat:1000"])
+        for bad in (["--expect"], ["--expect", "vfat:1000; reboot"], ["--expect", "--yes"], ["--expect", "a:b"],
+                    ["--expect", "../x:1"], ["--expect", "vfat:" + "9" * 30]):
+            with self.assertRaises(helper.Refused, msg=bad):
+                ask(bad)
 
 if __name__ == "__main__":
     unittest.main()

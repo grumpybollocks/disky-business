@@ -58,16 +58,33 @@ def facts(device, run=proc.run):
     name = os.path.basename(device)
     path = _BLOCK + name
     fs = _ask(["get-property", _BUS, path, _BUS + ".Block", "IdType"], run) or ""
+    size = _ask(["get-property", _BUS, path, _BUS + ".Block", "Size"], run) or 0
     points = _ask(["get-property", _BUS, path, _BUS + ".Filesystem", "MountPoints"], run) or []
     mounted = [bytes(p).rstrip(b"\0").decode("utf-8", "replace") for p in points]
-    return {"device": name, "fs": fs, "mounted": mounted}
+    return {"device": name, "fs": fs, "mounted": mounted, "size": int(size) if isinstance(size, int) else 0}
 
 
-def act(action, device, run=proc.run, timeout=6 * 3600):
+NOT_THE_ONE = ("This is not the partition that was confirmed: a different drive answers to that name now. "
+               "Nothing was done. Refresh the drive list and look again.")
+
+
+def expected(text):
+    """"vfat:123456" -> ("vfat", 123456): the file system and size the user was shown. None when not given."""
+    if not text:
+        return None
+    fs, _, size = str(text).rpartition(":")
+    if not size.isdigit():
+        raise Refused("The expected partition is not readable.")
+    return fs, int(size)
+
+
+def act(action, device, run=proc.run, timeout=6 * 3600, expect=None):
     """Check or repair. Returns {action, device, fs, ok, message}; raises Refused when nothing is done.
 
     There is no Stop: a check is left to finish, and a repair must never be cut short."""
     f = facts(device, run)
+    if expect is not None and (f["fs"], f["size"]) != tuple(expect):
+        raise Refused(NOT_THE_ONE)                      # names like sdb1 pass to another drive when drives are swapped
     if f["fs"] in frag.HANDS_OFF:
         raise Refused(NTFS_WHY)
     if f["mounted"]:
