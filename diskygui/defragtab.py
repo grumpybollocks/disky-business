@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (QFrame, QHBoxLayout, QLabel, QListWidget, QMessag
 
 from disky import frag, safety
 
-from .drives import fs_name
+from .drives import TEST_FOLDER, fs_name
 from .mapmodel import BAD, GOOD, UNTOUCHED, WRITTEN, MapModel
 from .mapwidget import BlockMap
 from .adminsession import admin_wrap  # noqa: F401  (also imported from here by older code and tests)
@@ -146,11 +146,19 @@ class DefragTab(TabBase):
         self.defrag_button.setEnabled(self.mode == "defrag" or (not busy and fs in frag.TOOLS and self.fragmented > 0))
         self.panel.set_busy(busy)
 
+    def files_folder(self):
+        """The folder whose files are looked at. For the system drive the panel names the app's own test folder,
+        which holds nothing of the user's: there the home folder around it is meant."""
+        folder = self.folder
+        if os.path.basename(folder) == TEST_FOLDER:
+            return os.path.dirname(folder)
+        return folder
+
     def scan_command(self):
         """(mode, target, wrapper) for the folder's file system, or None."""
         fs = self.kind()
         if fs in frag.TOOLS:
-            return "fragfiles", self.folder, ()
+            return "fragfiles", self.files_folder(), ()
         if fs == "exfat":
             device = self.device_of(self.folder)
             if device:
@@ -186,12 +194,12 @@ class DefragTab(TabBase):
             return
         n = self.fragmented
         if self.confirm(f"Defragment all {n} fragmented file{'s' if n != 1 else ''} here with the system's own "
-                        f"tool?\n{self.folder}\n\nEach file's content is checked afterwards to be unchanged. "
+                        f"tool?\n{self.files_folder()}\n\nEach file's content is checked afterwards to be unchanged. "
                         "It can take long. Stop ends it after the file in hand."):
             self.result = None
             self.progress.show_progress("Defragmenting", None, "looking for the fragmented files", "")
             self._begin("defrag", "Defragmenting...")
-            self.runner.start("defragall", self.folder)
+            self.runner.start("defragall", self.files_folder())
 
     def _begin(self, mode, text):
         self.error = None

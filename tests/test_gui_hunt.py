@@ -490,5 +490,42 @@ class Hunt(unittest.TestCase):
         self.assertTrue(all(r.about for r in smart.nvme_rows({"power_cycles": 7})))
         self.assertNotIn("Scanning only reads", defragtab.DefragTab.NOTE)
 
+    # -- layout faults from the walk on real drives (step 7.2) ----------------------------------------------
+    def test_the_drive_list_uses_the_room_it_has(self):
+        many = [drive(f"DRIVE {n}", path=f"/p/{n}") for n in range(10)]
+        win = self.open(many)
+        win.resize(1180, 760)
+        win.show()
+        self.app.processEvents()
+        panel = win.pages[0].panel
+        row = panel.drive_list.sizeHintForRow(0)
+        self.assertGreater(panel.drive_list.height(), 7 * row)      # most of ten drives, not four and a half
+        self.assertTrue(panel.health.isHidden() and panel.action_note.isHidden())   # nothing to say: no room taken
+        self.pick(win.pages[0], 0)
+        self.assertFalse(panel.health.isHidden())                   # a picked drive has a health box
+        tall = panel.drive_list.height()
+        win.resize(1180, 1000)
+        self.app.processEvents()
+        self.assertGreater(panel.drive_list.height(), tall + 150)   # and it grows with the window
+
+    def test_the_plan_names_the_free_space_before_our_folder_exists(self):
+        from diskygui.window import test_plan
+        parent = self.folder()
+        ours = os.path.join(parent, "Disky Business test files")     # made on Start, not before
+        self.assertFalse(os.path.exists(ours))
+        text = test_plan(ours, system=lambda p: False)
+        self.assertIn("fills the free space here (", text)
+        self.assertNotEqual(text, "Press \"Start test\" to test this drive.")
+
+    def test_defrag_on_the_system_drive_looks_at_the_home_folder(self):
+        home = self.folder()
+        win = self.open([])
+        tab = self.page(win, "Defrag")
+        tab.fs_type = lambda path: "btrfs"
+        tab.set_folder(os.path.join(home, "Disky Business test files"))
+        self.assertEqual(tab.scan_command(), ("fragfiles", home, ()))
+        tab.set_folder("/some/other/drive")
+        self.assertEqual(tab.scan_command(), ("fragfiles", "/some/other/drive", ()))
+
 if __name__ == "__main__":
     unittest.main()

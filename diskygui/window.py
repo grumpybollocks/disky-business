@@ -65,8 +65,12 @@ def test_plan(folder, statvfs=os.statvfs, files=None, system=None):
     """What pressing Start will do in this folder, in one plain paragraph. Nothing is written to find out."""
     from disky import engine, safety
     try:
-        there = (files or engine.test_files)(folder)
-        vfs = statvfs(folder)
+        exists = os.path.isdir(folder)
+        there = (files or engine.test_files)(folder) if exists or files else []
+        where = folder
+        while not exists and where != os.path.dirname(where) and not os.path.isdir(where):
+            where = os.path.dirname(where)          # our own folder is made on Start: its drive is its parent's
+        vfs = statvfs(where)
     except OSError:
         return "Press \"Start test\" to test this drive."
     if there:

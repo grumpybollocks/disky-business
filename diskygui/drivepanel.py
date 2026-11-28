@@ -63,6 +63,18 @@ def _resume_collection():
             gc.enable()
 
 
+class _QuietLabel(QLabel):
+    """A label that takes room only while it has something to say, so the drive list gets the rest."""
+
+    def __init__(self, *args):
+        super().__init__(*args)
+        self.setVisible(bool(self.text()))
+
+    def setText(self, text):
+        super().setText(text)
+        self.setVisible(bool(text))
+
+
 class _Job:
     """One piece of slow work (asking the system about a drive) done off the window's thread."""
 
@@ -104,7 +116,7 @@ class DrivePanel(QWidget):
         dhead = QLabel("Drives")
         dhead.setObjectName("heading")
         self.drive_list = QListWidget()
-        self.drive_list.setFixedHeight(200)
+        self.drive_list.setMinimumHeight(140)           # it takes the room the panel has: ten drives, ten rows
         self.drive_list.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.drive_list.setTextElideMode(Qt.ElideRight)
         # Selection, not the "current" row: Qt makes row 0 current when the list merely gets keyboard focus,
@@ -138,7 +150,7 @@ class DrivePanel(QWidget):
         self.mount_button.clicked.connect(self.do_mount)
         self.unmount_button.clicked.connect(self.do_unmount)
         self.remove_button.clicked.connect(self.do_remove)
-        self.action_note = QLabel()
+        self.action_note = _QuietLabel()
         self.action_note.setWordWrap(True)
         buttons = QGridLayout()
         buttons.setContentsMargins(0, 0, 0, 0)
@@ -147,7 +159,7 @@ class DrivePanel(QWidget):
         buttons.addWidget(self.remove_button, 0, 1)
         buttons.addWidget(self.mount_button, 1, 0)
         buttons.addWidget(self.unmount_button, 1, 1)
-        self.health = QLabel()
+        self.health = _QuietLabel()
         self.health.setObjectName("health")
         self.health.setWordWrap(True)
         self.health.setMinimumHeight(84)
@@ -166,7 +178,7 @@ class DrivePanel(QWidget):
         self.note = QLabel(note)
         self.note.setWordWrap(True)
         col.addWidget(dhead)
-        col.addWidget(self.drive_list)
+        col.addWidget(self.drive_list, 1)
         col.addLayout(buttons)
         col.addWidget(self.action_note)
         col.addWidget(self.health)
@@ -175,7 +187,7 @@ class DrivePanel(QWidget):
             col.addWidget(w)
         for w in (head, self.folder_box, self.choose):
             w.setVisible(uses_folder)       # a tab that works on the drive itself (SMART) shows no folder
-        col.addStretch(1)
+        col.addStretch(0)                               # spare room goes to the drive list, not to a gap below
         self.setFixedWidth(250)
         self.load_drives()
 
